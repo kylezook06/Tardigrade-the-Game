@@ -22,8 +22,28 @@ class GameScene extends Phaser.Scene {
     // --- Player ---
     this.player = this.physics.add.sprite(this.worldW / 2, this.worldH / 2, "player_tardi");
     this.player.setDepth(5);
+    this.player.setOrigin(0.5, 0.5);
     this.player.setCollideWorldBounds(true);
-    this.player.body.setSize(46, 22, true);
+    this.player.body.setDrag(600);
+    this.player.body.setMaxVelocity(260);
+    this.player.body.setDamping(true);
+
+    const radius = Math.floor(this.player.width * 0.32);
+    this.player.body.setCircle(
+      radius,
+      this.player.width / 2 - radius,
+      this.player.height / 2 - radius
+    );
+
+    this.player.idleScale = 1;
+    this.tweens.add({
+      targets: this.player,
+      idleScale: 1.03,
+      duration: 900,
+      yoyo: true,
+      repeat: -1,
+      ease: "Sine.easeInOut"
+    });
 
     this.cameras.main.setBounds(0, 0, this.worldW, this.worldH);
     this.cameras.main.startFollow(this.player, true, 0.12, 0.12);
@@ -168,6 +188,11 @@ class GameScene extends Phaser.Scene {
 
     // Face direction of travel (cute)
     const pv = this.player.body.velocity;
+    const speed = pv.length();
+    const squash = Phaser.Math.Clamp(speed / 300, 0, 0.06);
+    const idle = this.player.idleScale || 1;
+    this.player.setScale(idle + squash, idle - squash);
+
     if (Math.abs(pv.x) > 1) this.player.setFlipX(pv.x < 0);
   }
 
