@@ -188,8 +188,8 @@ class GameScene extends Phaser.Scene {
 
     // Face direction of travel (cute)
     const pv = this.player.body.velocity;
-    const speed = pv.length();
-    const squash = Phaser.Math.Clamp(speed / 300, 0, 0.06);
+    const moveSpeed = pv.length();
+    const squash = Phaser.Math.Clamp(moveSpeed / 300, 0, 0.06);
     const idle = this.player.idleScale || 1;
     this.player.setScale(idle + squash, idle - squash);
 
