@@ -305,20 +305,123 @@ class GameScene extends Phaser.Scene {
   }
 
   _createBiomes() {
-    this._addBiomePatch(400, 380, 520, 420, "moss", 0x1f6f3a, 0.22);
-    this._addBiomePatch(1550, 520, 600, 460, "moss", 0x1f6f3a, 0.22);
+    this._clearBiomesAndSoil();
 
-    this._addBiomePatch(520, 1500, 520, 460, "lichen", 0x6fa86f, 0.18);
-    this._addBiomePatch(1500, 1500, 620, 520, "lichen", 0x6fa86f, 0.18);
+    const mossCount = 2;
+    const lichenCount = 2;
+    const soilCount = 3;
 
-    this._addSoilObstacle(950, 980, 540, 260);
-    this._addSoilObstacle(350, 1000, 260, 520);
-    this._addSoilObstacle(1780, 980, 260, 520);
+    const mossSize = { wMin: 420, wMax: 720, hMin: 360, hMax: 620 };
+    const lichenSize = { wMin: 420, wMax: 720, hMin: 360, hMax: 620 };
+    const soilSize = { wMin: 260, wMax: 620, hMin: 220, hMax: 520 };
+
+    const pad = 140;
+    const minFromPlayer = 520;
+    const minBetweenPatches = 260;
+    const minBetweenSoil = 320;
+
+    this._placedRects = [];
+
+    for (let i = 0; i < soilCount; i++) {
+      const w = Phaser.Math.Between(soilSize.wMin, soilSize.wMax);
+      const h = Phaser.Math.Between(soilSize.hMin, soilSize.hMax);
+
+      const pos = this._findPlacement(w, h, pad, minFromPlayer, minBetweenSoil, 40);
+      if (!pos) continue;
+
+      this._placedRects.push({ x: pos.x, y: pos.y, w, h, type: "soil" });
+      this._addSoilObstacle(pos.x, pos.y, w, h);
+    }
+
+    for (let i = 0; i < mossCount; i++) {
+      const w = Phaser.Math.Between(mossSize.wMin, mossSize.wMax);
+      const h = Phaser.Math.Between(mossSize.hMin, mossSize.hMax);
+
+      const pos = this._findPlacement(w, h, pad, minFromPlayer, minBetweenPatches, 40);
+      if (!pos) continue;
+
+      this._placedRects.push({ x: pos.x, y: pos.y, w, h, type: "moss" });
+      this._addBiomePatch(pos.x, pos.y, w, h, "moss", 0x1f6f3a, 0.22);
+    }
+
+    for (let i = 0; i < lichenCount; i++) {
+      const w = Phaser.Math.Between(lichenSize.wMin, lichenSize.wMax);
+      const h = Phaser.Math.Between(lichenSize.hMin, lichenSize.hMax);
+
+      const pos = this._findPlacement(w, h, pad, minFromPlayer, minBetweenPatches, 40);
+      if (!pos) continue;
+
+      this._placedRects.push({ x: pos.x, y: pos.y, w, h, type: "lichen" });
+      this._addBiomePatch(pos.x, pos.y, w, h, "lichen", 0x6fa86f, 0.18);
+    }
+  }
+
+  _clearBiomesAndSoil() {
+    if (this.biomeZones) {
+      this.biomeZones.getChildren().forEach((z) => {
+        if (z && z.body) z.body.destroy();
+        if (z) z.destroy();
+      });
+      this.biomeZones.clear(true);
+    }
+
+    if (this.soilWalls) {
+      this.soilWalls.getChildren().forEach((w) => {
+        if (w && w.body) w.body.destroy();
+        if (w) w.destroy();
+      });
+      this.soilWalls.clear(true);
+    }
+
+    if (this._biomeVisuals) {
+      this._biomeVisuals.forEach((o) => o.destroy());
+    }
+    this._biomeVisuals = [];
+  }
+
+  _findPlacement(w, h, pad, minFromPlayer, minBetweenCenters, tries) {
+    const px = this.player.x;
+    const py = this.player.y;
+
+    for (let i = 0; i < tries; i++) {
+      const x = Phaser.Math.Between(pad + w / 2, this.worldW - pad - w / 2);
+      const y = Phaser.Math.Between(pad + h / 2, this.worldH - pad - h / 2);
+
+      if (Phaser.Math.Distance.Between(px, py, x, y) < minFromPlayer) continue;
+
+      let ok = true;
+      for (const r of (this._placedRects || [])) {
+        const d = Phaser.Math.Distance.Between(r.x, r.y, x, y);
+        if (d < minBetweenCenters) { ok = false; break; }
+        if (this._rectsOverlap(r, { x, y, w, h }, 40)) { ok = false; break; }
+      }
+
+      if (!ok) continue;
+      return { x, y };
+    }
+
+    return null;
+  }
+
+  _rectsOverlap(a, b, pad) {
+    const ax1 = a.x - a.w / 2 - pad;
+    const ax2 = a.x + a.w / 2 + pad;
+    const ay1 = a.y - a.h / 2 - pad;
+    const ay2 = a.y + a.h / 2 + pad;
+
+    const bx1 = b.x - b.w / 2 - pad;
+    const bx2 = b.x + b.w / 2 + pad;
+    const by1 = b.y - b.h / 2 - pad;
+    const by2 = b.y + b.h / 2 + pad;
+
+    return !(ax2 < bx1 || ax1 > bx2 || ay2 < by1 || ay1 > by2);
   }
 
   _addBiomePatch(x, y, w, h, biomeName, color, alpha) {
     const g = this.add.rectangle(x, y, w, h, color, alpha);
     g.setDepth(1);
+    this._biomeVisuals = this._biomeVisuals || [];
+    this._biomeVisuals.push(g);
 
     const zone = this.add.zone(x, y, w, h);
     this.physics.add.existing(zone, true);
@@ -347,6 +450,9 @@ class GameScene extends Phaser.Scene {
 
     g.lineStyle(3, 0x000000, 0.25);
     g.strokeRoundedRect(x - w / 2, y - h / 2, w, h, 22);
+
+    this._biomeVisuals = this._biomeVisuals || [];
+    this._biomeVisuals.push(g);
 
     const wall = this.add.zone(x, y, w, h);
     this.physics.add.existing(wall, true);
