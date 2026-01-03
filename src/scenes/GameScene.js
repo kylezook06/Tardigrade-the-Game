@@ -68,7 +68,7 @@ class GameScene extends Phaser.Scene {
     this.hazards = this.physics.add.group({ immovable: false, allowGravity: false });
 
     // --- Biomes ---
-    this.biomeZones = this.physics.add.staticGroup(); // overlap-only zones
+    this.biomeZones = this.add.group();
     this.soilWalls = this.physics.add.staticGroup();  // impassable obstacles
 
     // Soil is solid
@@ -293,8 +293,8 @@ class GameScene extends Phaser.Scene {
   _resolveBiome() {
     let found = null;
 
-    this.biomeZones.children.iterate((z) => {
-      if (!z) return;
+    this.biomeZones.getChildren().forEach((z) => {
+      if (found) return;
       if (this.physics.overlap(this.player, z)) {
         found = z.getData("biome");
       }
@@ -319,11 +319,13 @@ class GameScene extends Phaser.Scene {
     const g = this.add.rectangle(x, y, w, h, color, alpha);
     g.setDepth(1);
 
-    const z = this.biomeZones.create(x, y, null);
-    z.setSize(w, h);
-    z.setVisible(false);
-    z.refreshBody();
-    z.setData("biome", biomeName);
+    const zone = this.add.zone(x, y, w, h);
+    this.physics.add.existing(zone, true);
+    zone.body.setSize(w, h);
+    zone.body.updateFromGameObject();
+    zone.setData("biome", biomeName);
+
+    this.biomeZones.add(zone);
   }
 
   _addSoilObstacle(x, y, w, h) {
