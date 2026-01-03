@@ -69,11 +69,11 @@ class GameScene extends Phaser.Scene {
 
     // --- Biomes ---
     this.biomeZones = this.add.group();
-    this.soilWalls = this.physics.add.staticGroup();  // impassable obstacles
+    this.soilWalls = this.add.group();  // impassable obstacles
 
     // Soil is solid
     this.physics.add.collider(this.player, this.soilWalls);
-    this.physics.add.collider(this.hazards, this.soilWalls);
+    this.physics.add.collider(this.hazards, this.soilWalls, this._onHazardHitsSoil, null, this);
 
     // --- Collisions ---
     this.physics.add.overlap(this.player, this.food, this._onEatFood, null, this);
@@ -262,6 +262,7 @@ class GameScene extends Phaser.Scene {
     h.body.setCircle(r);
     h.body.setCollideWorldBounds(true);
     h.body.onWorldBounds = true;
+    h.body.setBounce(1, 1);
 
     // initial drift
     const a = Phaser.Math.FloatBetween(0, Math.PI * 2);
@@ -329,13 +330,36 @@ class GameScene extends Phaser.Scene {
   }
 
   _addSoilObstacle(x, y, w, h) {
-    const g = this.add.rectangle(x, y, w, h, 0x3a2a1f, 0.38);
+    const g = this.add.graphics();
     g.setDepth(2);
 
-    const wall = this.soilWalls.create(x, y, null);
-    wall.setSize(w, h);
-    wall.setVisible(false);
-    wall.refreshBody();
+    g.fillStyle(0x3a2a1f, 0.55);
+    g.fillRoundedRect(x - w / 2, y - h / 2, w, h, 22);
+
+    g.fillStyle(0x2a1d15, 0.35);
+    const specks = Math.floor((w * h) / 14000);
+    for (let i = 0; i < specks; i++) {
+      const sx = Phaser.Math.Between(x - w / 2 + 12, x + w / 2 - 12);
+      const sy = Phaser.Math.Between(y - h / 2 + 12, y + h / 2 - 12);
+      const r = Phaser.Math.Between(2, 6);
+      g.fillCircle(sx, sy, r);
+    }
+
+    g.lineStyle(3, 0x000000, 0.25);
+    g.strokeRoundedRect(x - w / 2, y - h / 2, w, h, 22);
+
+    const wall = this.add.zone(x, y, w, h);
+    this.physics.add.existing(wall, true);
+    wall.body.setSize(w, h);
+    wall.body.updateFromGameObject();
+
+    this.soilWalls.add(wall);
+  }
+
+  _onHazardHitsSoil(hazard) {
+    const base = hazard.getData("baseSpeed") || 110;
+    const a = Phaser.Math.FloatBetween(0, Math.PI * 2);
+    hazard.setVelocity(Math.cos(a) * base * 0.4, Math.sin(a) * base * 0.4);
   }
 
   _hazardWander() {
