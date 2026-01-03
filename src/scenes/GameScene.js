@@ -106,6 +106,8 @@ class GameScene extends Phaser.Scene {
     this.predatorWanderSpeed = 90;
     this.predatorTurnRate = 0.06;
     this.predatorWarned = false;
+    this.hasUsedMusicKey = false;
+    this.game.events.emit("ui:notify", { text: "Tip: Press M to cycle background music (includes OFF).", kind: "note" });
     this.recentFacts = [];
     this.maxRecentFacts = 4;
 
@@ -191,6 +193,7 @@ class GameScene extends Phaser.Scene {
     this._updateMovement(dt);
     this._applyFoodMagnet(dt);
     if (Phaser.Input.Keyboard.JustDown(this.keyM)) {
+      this.hasUsedMusicKey = true;
       this._cycleMusic();
     }
 
@@ -322,6 +325,7 @@ class GameScene extends Phaser.Scene {
     h.setData("kindName", pick.name);
     h.setData("baseSpeed", pick.speed);
     h.setData("damage", pick.dmg);
+    this._addEnemyTween(h, pick.name.toLowerCase());
 
     const r = Math.max(8, Math.floor(Math.min(h.width, h.height) * 0.35));
     h.body.setCircle(r);
@@ -538,28 +542,7 @@ class GameScene extends Phaser.Scene {
     tiles.setMask(geomMask);
     edgeFade.setMask(geomMask);
 
-    const rim = this.add.graphics();
-    rim.fillStyle(0x000000, 0.10);
-    rim.beginPath();
-    for (let i = 0; i <= points; i++) {
-      const t = (i / points) * Math.PI * 2;
-      const n =
-        Math.sin(t * 2 + seed) * 0.55 +
-        Math.cos(t * 3 - seed * 0.7) * 0.35 +
-        Math.sin(t * 5 + seed * 0.13) * 0.25;
-
-      const rnx = (rx + 30) * (1 + n * noise);
-      const rny = (ry + 30) * (1 + n * noise);
-      const px = x + Math.cos(t) * rnx;
-      const py = y + Math.sin(t) * rny;
-
-      if (i === 0) rim.moveTo(px, py);
-      else rim.lineTo(px, py);
-    }
-    rim.closePath();
-    rim.fillPath();
-    rim.setDepth(0);
-    rim.setBlendMode(Phaser.BlendModes.MULTIPLY);
+    const rim = this._drawFeatherRim(x, y, w, h, seed, 0.12, 18, 10, 3);
 
     this._biomeVisuals.push(maskGfx);
     this._biomeVisuals.push(rim);
@@ -579,7 +562,41 @@ class GameScene extends Phaser.Scene {
     tile.setAlpha(0.95);
     tile.setTint(0xd6b08c);
     this._biomeVisuals = this._biomeVisuals || [];
-    this._biomeVisuals.push(tile);
+
+    const maskGfx = this.make.graphics({ x: 0, y: 0, add: false });
+    maskGfx.fillStyle(0xffffff, 1);
+
+    const points = 32;
+    const rx = (w * 0.50) * 0.98;
+    const ry = (h * 0.50) * 0.98;
+    const noise = 0.18;
+    const seed = Phaser.Math.Between(0, 99999);
+
+    maskGfx.beginPath();
+    for (let i = 0; i <= points; i++) {
+      const t = (i / points) * Math.PI * 2;
+      const n =
+        Math.sin(t * 2 + seed) * 0.55 +
+        Math.cos(t * 3 - seed * 0.7) * 0.35 +
+        Math.sin(t * 5 + seed * 0.13) * 0.25;
+
+      const rnx = rx * (1 + n * noise);
+      const rny = ry * (1 + n * noise);
+      const px = x + Math.cos(t) * rnx;
+      const py = y + Math.sin(t) * rny;
+
+      if (i === 0) maskGfx.moveTo(px, py);
+      else maskGfx.lineTo(px, py);
+    }
+    maskGfx.closePath();
+    maskGfx.fillPath();
+
+    const geomMask = maskGfx.createGeometryMask();
+    tile.setMask(geomMask);
+
+    const rim = this._drawFeatherRim(x, y, w, h, seed, 0.18, 12, 8, 2);
+
+    this._biomeVisuals.push(tile, maskGfx, rim);
 
     const wall = this.add.zone(x, y, w, h);
     this.physics.add.existing(wall, true);
@@ -587,6 +604,46 @@ class GameScene extends Phaser.Scene {
     wall.body.updateFromGameObject();
 
     this.soilWalls.add(wall);
+  }
+
+  _drawFeatherRim(x, y, w, h, seed, baseAlpha, expandStart, expandStep, rings) {
+    const g = this.add.graphics();
+    g.setDepth(0);
+    g.setBlendMode(Phaser.BlendModes.MULTIPLY);
+
+    const points = 32;
+    const rx0 = (w * 0.5) * 0.98;
+    const ry0 = (h * 0.5) * 0.98;
+    const noise = 0.14;
+
+    for (let r = 0; r < rings; r++) {
+      const expand = expandStart + r * expandStep;
+      const alpha = baseAlpha * (1 - r / rings);
+
+      g.fillStyle(0x000000, alpha);
+      g.beginPath();
+
+      for (let i = 0; i <= points; i++) {
+        const t = (i / points) * Math.PI * 2;
+        const n =
+          Math.sin(t * 2 + seed) * 0.55 +
+          Math.cos(t * 3 - seed * 0.7) * 0.35 +
+          Math.sin(t * 5 + seed * 0.13) * 0.25;
+
+        const rnx = (rx0 + expand) * (1 + n * noise);
+        const rny = (ry0 + expand) * (1 + n * noise);
+
+        const px = x + Math.cos(t) * rnx;
+        const py = y + Math.sin(t) * rny;
+
+        if (i === 0) g.moveTo(px, py);
+        else g.lineTo(px, py);
+      }
+      g.closePath();
+      g.fillPath();
+    }
+
+    return g;
   }
 
   _onHazardHitsSoil(objA, objB) {
@@ -607,6 +664,58 @@ class GameScene extends Phaser.Scene {
 
   _onPlayerHitsSoil() {
     this._unlockCodex("biome_soil");
+  }
+
+  _addEnemyTween(sprite, kind) {
+    if (!sprite || sprite.getData("tweened")) return;
+    sprite.setData("tweened", true);
+
+    if (kind === "amoeba") {
+      this.tweens.add({
+        targets: sprite,
+        duration: 900,
+        scaleX: sprite.scaleX * 1.06,
+        scaleY: sprite.scaleY * 0.94,
+        yoyo: true,
+        repeat: -1,
+        ease: "Sine.easeInOut"
+      });
+    } else if (kind === "mite") {
+      this.tweens.add({
+        targets: sprite,
+        duration: 220,
+        angle: "+=2",
+        yoyo: true,
+        repeat: -1,
+        ease: "Sine.easeInOut"
+      });
+      this.tweens.add({
+        targets: sprite,
+        duration: 500,
+        y: sprite.y - 2,
+        yoyo: true,
+        repeat: -1,
+        ease: "Sine.easeInOut"
+      });
+    } else if (kind === "nematode") {
+      this.tweens.add({
+        targets: sprite,
+        duration: 320,
+        angle: "+=4",
+        yoyo: true,
+        repeat: -1,
+        ease: "Sine.easeInOut"
+      });
+    } else {
+      this.tweens.add({
+        targets: sprite,
+        duration: 650,
+        y: sprite.y - 2,
+        yoyo: true,
+        repeat: -1,
+        ease: "Sine.easeInOut"
+      });
+    }
   }
 
   _hazardWander() {
