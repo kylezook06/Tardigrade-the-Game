@@ -96,15 +96,16 @@ class GameScene extends Phaser.Scene {
     // --- Timers ---
     this.runStart = this.time.now;
     this.lastReproductionTime = 0;
-    this.predator = null;
-    this.predatorSpawned = false;
     this.predatorUnlockMs = 120000;
+    this.predators = this.physics.add.group();
+    this.predatorIntervalMs = 120000;
+    this.nextPredatorAt = this.runStart + this.predatorIntervalMs;
+    this.maxPredators = 3;
     this.predatorFovDeg = 85;
     this.predatorRange = 780;
     this.predatorSpeed = 210;
     this.predatorWanderSpeed = 90;
     this.predatorTurnRate = 0.06;
-    this.predatorNextWanderAt = 0;
     this.predatorWarned = false;
 
     // --- Audio ---
@@ -167,6 +168,11 @@ class GameScene extends Phaser.Scene {
     }
     this._applyCodexPause(false);
     const dt = delta / 1000;
+
+    if (time >= this.nextPredatorAt && this.predators.getLength() < this.maxPredators) {
+      this._spawnPredator();
+      this.nextPredatorAt += this.predatorIntervalMs;
+    }
 
     // End run at 20 minutes
     const elapsed = time - this.runStart;
@@ -306,7 +312,8 @@ class GameScene extends Phaser.Scene {
   }
 
   _spawnHazard() {
-    if (this.hazards.getLength() >= 18) return;
+    const maxHazards = 26;
+    if (this.hazards.getLength() >= maxHazards) return;
     const kinds = [
       { key: "haz_nematode", name: "Nematode", speed: 120, dmg: 10 },
       { key: "haz_amoeba", name: "Amoeba", speed: 95,  dmg: 12 },
@@ -414,7 +421,7 @@ class GameScene extends Phaser.Scene {
       if (!pos) continue;
 
       this._placedRects.push({ x: pos.x, y: pos.y, w, h, type: "moss" });
-      this._addBiomePatch(pos.x, pos.y, w, h, "moss", 0x1f6f3a, 0.22);
+      this._addBiomePatch(pos.x, pos.y, w, h, "moss");
     }
 
     for (let i = 0; i < lichenCount; i++) {
@@ -425,7 +432,7 @@ class GameScene extends Phaser.Scene {
       if (!pos) continue;
 
       this._placedRects.push({ x: pos.x, y: pos.y, w, h, type: "lichen" });
-      this._addBiomePatch(pos.x, pos.y, w, h, "lichen", 0x6fa86f, 0.18);
+      this._addBiomePatch(pos.x, pos.y, w, h, "lichen");
     }
   }
 
@@ -490,11 +497,13 @@ class GameScene extends Phaser.Scene {
     return !(ax2 < bx1 || ax1 > bx2 || ay2 < by1 || ay1 > by2);
   }
 
-  _addBiomePatch(x, y, w, h, biomeName, color, alpha) {
-    const g = this.add.rectangle(x, y, w, h, color, alpha);
-    g.setDepth(1);
+  _addBiomePatch(x, y, w, h, biomeName) {
+    const tileKey = `biome_${biomeName}`;
+    const tiles = this.add.tileSprite(x, y, w, h, tileKey);
+    tiles.setDepth(1);
+    tiles.setAlpha(0.55);
     this._biomeVisuals = this._biomeVisuals || [];
-    this._biomeVisuals.push(g);
+    this._biomeVisuals.push(tiles);
 
     const zone = this.add.zone(x, y, w, h);
     this.physics.add.existing(zone, true);
@@ -506,26 +515,11 @@ class GameScene extends Phaser.Scene {
   }
 
   _addSoilObstacle(x, y, w, h) {
-    const g = this.add.graphics();
-    g.setDepth(2);
-
-    g.fillStyle(0x3a2a1f, 0.55);
-    g.fillRoundedRect(x - w / 2, y - h / 2, w, h, 22);
-
-    g.fillStyle(0x2a1d15, 0.35);
-    const specks = Math.floor((w * h) / 14000);
-    for (let i = 0; i < specks; i++) {
-      const sx = Phaser.Math.Between(x - w / 2 + 12, x + w / 2 - 12);
-      const sy = Phaser.Math.Between(y - h / 2 + 12, y + h / 2 - 12);
-      const r = Phaser.Math.Between(2, 6);
-      g.fillCircle(sx, sy, r);
-    }
-
-    g.lineStyle(3, 0x000000, 0.25);
-    g.strokeRoundedRect(x - w / 2, y - h / 2, w, h, 22);
-
+    const tile = this.add.tileSprite(x, y, w, h, "biome_soil");
+    tile.setDepth(2);
+    tile.setAlpha(0.9);
     this._biomeVisuals = this._biomeVisuals || [];
-    this._biomeVisuals.push(g);
+    this._biomeVisuals.push(tile);
 
     const wall = this.add.zone(x, y, w, h);
     this.physics.add.existing(wall, true);
@@ -828,90 +822,98 @@ class GameScene extends Phaser.Scene {
   }
 
   _maybeSpawnPredator() {
-    if (this.predatorSpawned) return;
-
+    if (this.predators.getLength() >= this.maxPredators) return;
     const elapsed = this.time.now - this.runStart;
     const offspring = this.registry.get("offspring") || 0;
 
     if (elapsed >= this.predatorUnlockMs || offspring >= 1) {
       this._spawnPredator();
+      if (this.time.now >= this.nextPredatorAt) {
+        this.nextPredatorAt = this.time.now + this.predatorIntervalMs;
+      }
     }
   }
 
   _spawnPredator() {
-    this.predatorSpawned = true;
-
+    if (this.predators.getLength() >= this.maxPredators) return;
     const p = this._randomPointFarFromPlayer ? this._randomPointFarFromPlayer(650) : { x: 200, y: 200 };
-    this.predator = this.physics.add.sprite(p.x, p.y, "player_tardi");
-    this.predator.setDepth(4);
+    const predator = this.predators.create(p.x, p.y, "player_tardi");
+    predator.setDepth(4);
+    predator.setTint(0xff8888);
+    predator.setScale(1.05);
+    predator.setAlpha(0.95);
 
-    this.predator.setTint(0xff8888);
-    this.predator.setScale(1.05);
-    this.predator.setAlpha(0.95);
+    const r = Math.floor(predator.width * 0.30);
+    predator.body.setCircle(r, predator.width / 2 - r, predator.height / 2 - r);
+    predator.body.setDrag(250);
+    predator.body.setMaxVelocity(this.predatorSpeed);
+    predator.setCollideWorldBounds(true);
 
-    const r = Math.floor(this.predator.width * 0.30);
-    this.predator.body.setCircle(r, this.predator.width / 2 - r, this.predator.height / 2 - r);
+    predator.setData("facing", Phaser.Math.FloatBetween(-Math.PI, Math.PI));
+    predator.setData("nextWanderAt", 0);
 
-    this.predator.setCollideWorldBounds(true);
-    this.predator.body.setDrag(250);
-    this.predator.body.setMaxVelocity(this.predatorSpeed);
-
-    this.predatorFacing = Phaser.Math.FloatBetween(-Math.PI, Math.PI);
-
-    if (this.soilWalls) {
-      this.physics.add.collider(this.predator, this.soilWalls);
-    }
-
-    this.physics.add.overlap(this.player, this.predator, this._onHitPredator, null, this);
+    this.physics.add.overlap(this.player, predator, this._onHitPredator, null, this);
+    this.physics.add.collider(predator, this.soilWalls);
 
     if (!this.predatorWarned) {
       this.predatorWarned = true;
-      this.game.events.emit("ui:notify", { text: "Warning: Carnivorous tardigrade detected!", kind: "fact" });
+    this.game.events.emit("ui:notify", { text: "A carnivorous tardigrade enters the ecosystem.", kind: "fact" });
     }
     this.game.events.emit("ui:notify", { text: "Some tardigrade species are carnivorous and hunt other microfauna (even other tardigrades).", kind: "fact" });
     this._unlockCodex("pred_carnivorous_tardigrade");
   }
 
   _updatePredator(time, dt) {
-    if (!this.predator || !this.predator.active) return;
+    if (!this.predators || this.predators.getLength() === 0) return;
 
     const px = this.player.x, py = this.player.y;
-    const ex = this.predator.x, ey = this.predator.y;
 
-    const toPlayer = new Phaser.Math.Vector2(px - ex, py - ey);
-    const dist = toPlayer.length();
-    const canSee = this._predatorCanSeePlayer(ex, ey, px, py, dist);
+    this.predators.children.iterate((predator) => {
+      if (!predator || !predator.active) return;
 
-    if (canSee) {
-      const targetAng = Math.atan2(toPlayer.y, toPlayer.x);
-      this.predatorFacing = Phaser.Math.Angle.RotateTo(this.predatorFacing, targetAng, this.predatorTurnRate);
+      const ex = predator.x, ey = predator.y;
+      const toPlayer = new Phaser.Math.Vector2(px - ex, py - ey);
+      const dist = toPlayer.length();
+      const facing = predator.getData("facing") || 0;
+      const canSee = this._predatorCanSeePlayer(ex, ey, px, py, dist, facing);
 
-      const v = new Phaser.Math.Vector2(Math.cos(this.predatorFacing), Math.sin(this.predatorFacing))
-        .scale(this.predatorSpeed);
-      this.predator.setVelocity(v.x, v.y);
-    } else {
-      if (time >= this.predatorNextWanderAt) {
-        this.predatorNextWanderAt = time + Phaser.Math.Between(900, 1700);
-        this.predatorWanderAng = Phaser.Math.FloatBetween(-Math.PI, Math.PI);
+      if (canSee) {
+        const targetAng = Math.atan2(toPlayer.y, toPlayer.x);
+        const nextFacing = Phaser.Math.Angle.RotateTo(facing, targetAng, this.predatorTurnRate);
+        predator.setData("facing", nextFacing);
+
+        const v = new Phaser.Math.Vector2(Math.cos(nextFacing), Math.sin(nextFacing))
+          .scale(this.predatorSpeed);
+        predator.setVelocity(v.x, v.y);
+      } else {
+        let nextWanderAt = predator.getData("nextWanderAt") || 0;
+        let wanderAng = predator.getData("wanderAng") || 0;
+        if (time >= nextWanderAt) {
+          nextWanderAt = time + Phaser.Math.Between(900, 1700);
+          wanderAng = Phaser.Math.FloatBetween(-Math.PI, Math.PI);
+          predator.setData("nextWanderAt", nextWanderAt);
+          predator.setData("wanderAng", wanderAng);
+        }
+
+        const v = new Phaser.Math.Vector2(Math.cos(wanderAng), Math.sin(wanderAng))
+          .scale(this.predatorWanderSpeed);
+        predator.setVelocity(v.x, v.y);
+
+        const nextFacing = Phaser.Math.Angle.RotateTo(facing, wanderAng, 0.02);
+        predator.setData("facing", nextFacing);
       }
 
-      const v = new Phaser.Math.Vector2(Math.cos(this.predatorWanderAng || 0), Math.sin(this.predatorWanderAng || 0))
-        .scale(this.predatorWanderSpeed);
-      this.predator.setVelocity(v.x, v.y);
-
-      this.predatorFacing = Phaser.Math.Angle.RotateTo(this.predatorFacing, (this.predatorWanderAng || 0), 0.02);
-    }
-
-    if (this.predator.body.velocity.x !== 0) {
-      this.predator.setFlipX(this.predator.body.velocity.x < 0);
-    }
+      if (predator.body.velocity.x !== 0) {
+        predator.setFlipX(predator.body.velocity.x < 0);
+      }
+    });
   }
 
-  _predatorCanSeePlayer(ex, ey, px, py, dist) {
+  _predatorCanSeePlayer(ex, ey, px, py, dist, facing) {
     if (dist > this.predatorRange) return false;
 
     const angToPlayer = Math.atan2(py - ey, px - ex);
-    const delta = Phaser.Math.Angle.Wrap(angToPlayer - this.predatorFacing);
+    const delta = Phaser.Math.Angle.Wrap(angToPlayer - facing);
     const halfFov = Phaser.Math.DegToRad(this.predatorFovDeg * 0.5);
     if (Math.abs(delta) > halfFov) return false;
 
@@ -993,7 +995,11 @@ class GameScene extends Phaser.Scene {
     if (shouldPause) {
       this.player.setVelocity(0, 0);
 
-      if (this.predator && this.predator.body) this.predator.setVelocity(0, 0);
+      if (this.predators) {
+        this.predators.children.iterate((predator) => {
+          if (predator && predator.body) predator.setVelocity(0, 0);
+        });
+      }
 
       if (this.hazards) {
         this.hazards.children.iterate((h) => {
