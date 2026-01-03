@@ -81,6 +81,7 @@ class GameScene extends Phaser.Scene {
 
     // --- Timers ---
     this.runStart = this.time.now;
+    this.lastReproductionTime = 0;
 
     this.foodTimer = this.time.addEvent({
       delay: this.foodSpawnInterval,
@@ -126,7 +127,12 @@ class GameScene extends Phaser.Scene {
     this.registry.set("timeRemainingMs", remaining);
 
     if (remaining <= 0) {
-      this._endRun("Time’s up! You survived the full observation window.");
+      const offspring = this.registry.get("offspring");
+      if (offspring > 0) {
+        this._endRun("Observation complete. Reproduction successful.");
+      } else {
+        this._endRun("Observation complete. No reproduction occurred.");
+      }
       return;
     }
 
@@ -608,17 +614,27 @@ class GameScene extends Phaser.Scene {
   _checkReproduction() {
     let xp = this.registry.get("xp");
     let threshold = this.registry.get("reproThreshold");
+    const cooldownMs = 90000;
+
+    if (this.lastReproductionTime && (this.time.now - this.lastReproductionTime < cooldownMs)) {
+      return;
+    }
 
     if (xp >= threshold) {
       let offspring = this.registry.get("offspring") + 1;
       this.registry.set("offspring", offspring);
+      this.lastReproductionTime = this.time.now;
 
       // Increase threshold each time (keeps it run-based, not instant)
-      threshold = Math.round(threshold * 1.35);
+      threshold = Math.floor(threshold * 1.6 + 120);
       this.registry.set("reproThreshold", threshold);
 
       this._emitNote(`Reproduction success! Egg laid 🥚 (Offspring: ${offspring})`);
       this._emitNote("Science note: Some tardigrades can reproduce via parthenogenesis depending on species.");
+
+      if (offspring >= 2) {
+        this._endRun("Reproduction threshold exceeded. Lineage secured.");
+      }
     }
   }
 

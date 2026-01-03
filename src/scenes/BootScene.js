@@ -39,7 +39,7 @@ class BootScene extends Phaser.Scene {
     this.registry.set("resist", 0);
     this.registry.set("magnet", 0);
     this.registry.set("offspring", 0);
-    this.registry.set("reproThreshold", 200);
+    this.registry.set("reproThreshold", 260);
 
     if (!this.game.events) this.game.events = new Phaser.Events.EventEmitter();
 

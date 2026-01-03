@@ -105,7 +105,7 @@ class UIScene extends Phaser.Scene {
       this.registry.set("resist", 0);
       this.registry.set("magnet", 0);
       this.registry.set("offspring", 0);
-      this.registry.set("reproThreshold", 200);
+      this.registry.set("reproThreshold", 260);
 
       // Hide game over UI and restart game scene
       this.gameOverBg.setVisible(false);
@@ -174,12 +174,19 @@ class UIScene extends Phaser.Scene {
     this.gameOverText.setVisible(true);
     this.restartHint.setVisible(true);
 
+    let resultLine = "Result: ❌ Lineage ends here.";
+    if (offspring === 1) {
+      resultLine = "Result: ✅ Species propagated.";
+    } else if (offspring > 1) {
+      resultLine = `Result: ⭐ Thriving lineage (${offspring} offspring).`;
+    }
+
     this.gameOverText.setText(
-      `🧪 RUN COMPLETE\n\n` +
+      `🧪 OBSERVATION COMPLETE\n\n` +
       `${reason}\n\n` +
       `Time survived: ${mm}:${ss}\n` +
       `Offspring produced: ${offspring}\n` +
-      `XP earned: ${xp}\n\n` +
+      `${resultLine}\n\n` +
       `Tip: Stay fed. Hunger is the silent killer.`
     );
 
