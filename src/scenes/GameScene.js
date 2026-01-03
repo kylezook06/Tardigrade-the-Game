@@ -18,6 +18,7 @@ class GameScene extends Phaser.Scene {
   }
 
   create() {
+    this._resetRunState();
     // --- World + camera ---
     this.physics.world.setBounds(0, 0, this.worldW, this.worldH);
 
@@ -128,6 +129,7 @@ class GameScene extends Phaser.Scene {
   }
 
   update(time, delta) {
+    if (this.registry.get("runEnded")) return;
     const dt = delta / 1000;
 
     // End run at 20 minutes
@@ -646,6 +648,26 @@ class GameScene extends Phaser.Scene {
   // Upgrades + reproduction
   // -----------------------------
 
+  _resetRunState() {
+    this.registry.set("hpMax", 100);
+    this.registry.set("hp", 100);
+
+    this.registry.set("hungerMax", 235);
+    this.registry.set("hunger", 235);
+
+    this.registry.set("xp", 0);
+    this.registry.set("level", 1);
+
+    this.registry.set("speed", 220);
+    this.registry.set("resist", 0);
+    this.registry.set("magnet", 0);
+
+    this.registry.set("offspring", 0);
+    this.registry.set("reproThreshold", 3000);
+
+    this.registry.set("runEnded", false);
+  }
+
   _applyAutoUpgrade() {
     const options = [
       () => {
@@ -676,28 +698,25 @@ class GameScene extends Phaser.Scene {
   }
 
   _checkReproduction() {
-    let xp = this.registry.get("xp");
+    const xp = this.registry.get("xp");
     let threshold = this.registry.get("reproThreshold");
     const cooldownMs = 90000;
 
-    if (this.lastReproductionTime && (this.time.now - this.lastReproductionTime < cooldownMs)) {
-      return;
-    }
+    if (this.lastReproductionTime && (this.time.now - this.lastReproductionTime < cooldownMs)) return;
 
     if (xp >= threshold) {
-      let offspring = this.registry.get("offspring") + 1;
+      let offspring = (this.registry.get("offspring") || 0) + 1;
       this.registry.set("offspring", offspring);
       this.lastReproductionTime = this.time.now;
 
-      // Increase threshold each time (keeps it run-based, not instant)
-      threshold = Math.floor(threshold * 1.6 + 120);
+      threshold += 3000;
       this.registry.set("reproThreshold", threshold);
 
       this._emitNote(`Reproduction success! Egg laid 🥚 (Offspring: ${offspring})`);
       this._emitNote("Science note: Some tardigrades can reproduce via parthenogenesis depending on species.");
 
-      if (offspring >= 2) {
-        this._endRun("Reproduction threshold exceeded. Lineage secured.");
+      if (offspring >= 4) {
+        this._endRun("Lineage secured: 4 offspring produced.");
       }
     }
   }
@@ -728,6 +747,8 @@ class GameScene extends Phaser.Scene {
   // -----------------------------
 
   _endRun(reason) {
+    if (this.registry.get("runEnded")) return;
+    this.registry.set("runEnded", true);
     // Stop timers & movement; show summary via UI
     this.time.removeAllEvents();
     this.player.setVelocity(0, 0);

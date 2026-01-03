@@ -31,15 +31,15 @@ class BootScene extends Phaser.Scene {
     // --- Shared registry defaults ---
     this.registry.set("hpMax", 100);
     this.registry.set("hp", 100);
-    this.registry.set("hungerMax", 100);
-    this.registry.set("hunger", 100);
+    this.registry.set("hungerMax", 235);
+    this.registry.set("hunger", 235);
     this.registry.set("xp", 0);
     this.registry.set("level", 1);
     this.registry.set("speed", 220);
     this.registry.set("resist", 0);
     this.registry.set("magnet", 0);
     this.registry.set("offspring", 0);
-    this.registry.set("reproThreshold", 260);
+    this.registry.set("reproThreshold", 3000);
 
     if (!this.game.events) this.game.events = new Phaser.Events.EventEmitter();
 

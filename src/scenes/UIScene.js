@@ -81,6 +81,7 @@ class UIScene extends Phaser.Scene {
   }
 
   update() {
+    if (this.gameOverBg.visible) return;
     // HUD refresh
     const hp = Math.round(this.registry.get("hp"));
     const hpMax = this.registry.get("hpMax");
@@ -113,17 +114,6 @@ class UIScene extends Phaser.Scene {
 
     // Restart
     if (Phaser.Input.Keyboard.JustDown(this.restartKey) && this.gameOverBg.visible) {
-      // Reset shared stats (minimal)
-      this.registry.set("hp", this.registry.get("hpMax"));
-      this.registry.set("hunger", this.registry.get("hungerMax"));
-      this.registry.set("xp", 0);
-      this.registry.set("level", 1);
-      this.registry.set("speed", 220);
-      this.registry.set("resist", 0);
-      this.registry.set("magnet", 0);
-      this.registry.set("offspring", 0);
-      this.registry.set("reproThreshold", 260);
-
       // Hide game over UI and restart game scene
       this.gameOverBg.setVisible(false);
       this.gameOverText.setVisible(false);
