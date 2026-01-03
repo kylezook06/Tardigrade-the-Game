@@ -356,10 +356,20 @@ class GameScene extends Phaser.Scene {
     this.soilWalls.add(wall);
   }
 
-  _onHazardHitsSoil(hazard) {
-    const base = hazard.getData("baseSpeed") || 110;
+  _onHazardHitsSoil(objA, objB) {
+    const hazard = (objA && objA.getData && objA.getData("baseSpeed") !== undefined) ? objA : objB;
+    if (!hazard) return;
+
+    const base = hazard.getData ? (hazard.getData("baseSpeed") || 110) : 110;
     const a = Phaser.Math.FloatBetween(0, Math.PI * 2);
-    hazard.setVelocity(Math.cos(a) * base * 0.4, Math.sin(a) * base * 0.4);
+    const vx = Math.cos(a) * base * 0.4;
+    const vy = Math.sin(a) * base * 0.4;
+
+    if (hazard.setVelocity) {
+      hazard.setVelocity(vx, vy);
+    } else if (hazard.body && hazard.body.setVelocity) {
+      hazard.body.setVelocity(vx, vy);
+    }
   }
 
   _hazardWander() {
