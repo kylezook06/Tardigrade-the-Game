@@ -81,7 +81,20 @@ class UIScene extends Phaser.Scene {
   }
 
   update() {
+    // Restart
+    if (Phaser.Input.Keyboard.JustDown(this.restartKey) && this.gameOverBg.visible) {
+      // Hide game over UI and restart game scene
+      this.gameOverBg.setVisible(false);
+      this.gameOverText.setVisible(false);
+      this.restartHint.setVisible(false);
+
+      this.scene.get("GameScene").scene.restart();
+      this._enqueue({ text: "New run started. Good luck, water bear!", kind: "note" });
+      return;
+    }
+
     if (this.gameOverBg.visible) return;
+
     // HUD refresh
     const hp = Math.round(this.registry.get("hp"));
     const hpMax = this.registry.get("hpMax");
@@ -110,17 +123,6 @@ class UIScene extends Phaser.Scene {
       this.tunText.setText(`Tun: Cooldown (${Math.ceil(tunReadyIn / 1000)}s) [SPACE]`);
     } else {
       this.tunText.setText("Tun: Ready [SPACE]");
-    }
-
-    // Restart
-    if (Phaser.Input.Keyboard.JustDown(this.restartKey) && this.gameOverBg.visible) {
-      // Hide game over UI and restart game scene
-      this.gameOverBg.setVisible(false);
-      this.gameOverText.setVisible(false);
-      this.restartHint.setVisible(false);
-
-      this.scene.get("GameScene").scene.restart();
-      this._enqueue({ text: "New run started. Good luck, water bear!", kind: "note" });
     }
 
     // Pump queue

@@ -92,6 +92,16 @@ class GameScene extends Phaser.Scene {
     // --- Timers ---
     this.runStart = this.time.now;
     this.lastReproductionTime = 0;
+    this.predator = null;
+    this.predatorSpawned = false;
+    this.predatorUnlockMs = 120000;
+    this.predatorFovDeg = 70;
+    this.predatorRange = 520;
+    this.predatorSpeed = 170;
+    this.predatorWanderSpeed = 75;
+    this.predatorTurnRate = 0.06;
+    this.predatorNextWanderAt = 0;
+    this.predatorWarned = false;
 
     this.foodTimer = this.time.addEvent({
       delay: this.foodSpawnInterval,
@@ -109,6 +119,12 @@ class GameScene extends Phaser.Scene {
       delay: 15000,
       loop: true,
       callback: () => this._emitRandomFact()
+    });
+
+    this.predatorCheckTimer = this.time.addEvent({
+      delay: 500,
+      loop: true,
+      callback: () => this._maybeSpawnPredator()
     });
 
     // Initial spawns
@@ -149,6 +165,7 @@ class GameScene extends Phaser.Scene {
 
     this._resolveBiome();
     this._updateTun(time);
+    this._updatePredator(time, dt);
     this._updateNeeds(dt);
     this._updateMovement(dt);
     this._applyFoodMagnet(dt);
@@ -666,6 +683,9 @@ class GameScene extends Phaser.Scene {
     this.registry.set("reproThreshold", 3000);
 
     this.registry.set("runEnded", false);
+    this.registry.set("tunActive", false);
+    this.registry.set("tunReadyInMs", 0);
+    this.registry.set("tunEndsInMs", 0);
   }
 
   _applyAutoUpgrade() {
@@ -708,6 +728,7 @@ class GameScene extends Phaser.Scene {
       let offspring = (this.registry.get("offspring") || 0) + 1;
       this.registry.set("offspring", offspring);
       this.lastReproductionTime = this.time.now;
+      if (offspring === 1) this._maybeSpawnPredator();
 
       threshold += 3000;
       this.registry.set("reproThreshold", threshold);
@@ -719,6 +740,162 @@ class GameScene extends Phaser.Scene {
         this._endRun("Lineage secured: 4 offspring produced.");
       }
     }
+  }
+
+  _maybeSpawnPredator() {
+    if (this.predatorSpawned) return;
+
+    const elapsed = this.time.now - this.runStart;
+    const offspring = this.registry.get("offspring") || 0;
+
+    if (elapsed >= this.predatorUnlockMs || offspring >= 1) {
+      this._spawnPredator();
+    }
+  }
+
+  _spawnPredator() {
+    this.predatorSpawned = true;
+
+    const p = this._randomPointFarFromPlayer ? this._randomPointFarFromPlayer(650) : { x: 200, y: 200 };
+    this.predator = this.physics.add.sprite(p.x, p.y, "player_tardi");
+    this.predator.setDepth(4);
+
+    this.predator.setTint(0xff8888);
+    this.predator.setScale(1.05);
+    this.predator.setAlpha(0.95);
+
+    const r = Math.floor(this.predator.width * 0.30);
+    this.predator.body.setCircle(r, this.predator.width / 2 - r, this.predator.height / 2 - r);
+
+    this.predator.setCollideWorldBounds(true);
+    this.predator.body.setDrag(250);
+    this.predator.body.setMaxVelocity(this.predatorSpeed);
+
+    this.predatorFacing = Phaser.Math.FloatBetween(-Math.PI, Math.PI);
+
+    if (this.soilWalls) {
+      this.physics.add.collider(this.predator, this.soilWalls);
+    }
+
+    this.physics.add.overlap(this.player, this.predator, this._onHitPredator, null, this);
+
+    if (!this.predatorWarned) {
+      this.predatorWarned = true;
+      this.game.events.emit("ui:notify", { text: "Warning: Carnivorous tardigrade detected!", kind: "fact" });
+    }
+  }
+
+  _updatePredator(time, dt) {
+    if (!this.predator || !this.predator.active) return;
+
+    const px = this.player.x, py = this.player.y;
+    const ex = this.predator.x, ey = this.predator.y;
+
+    const toPlayer = new Phaser.Math.Vector2(px - ex, py - ey);
+    const dist = toPlayer.length();
+    const canSee = this._predatorCanSeePlayer(ex, ey, px, py, dist);
+
+    if (canSee) {
+      const targetAng = Math.atan2(toPlayer.y, toPlayer.x);
+      this.predatorFacing = Phaser.Math.Angle.RotateTo(this.predatorFacing, targetAng, this.predatorTurnRate);
+
+      const v = new Phaser.Math.Vector2(Math.cos(this.predatorFacing), Math.sin(this.predatorFacing))
+        .scale(this.predatorSpeed);
+      this.predator.setVelocity(v.x, v.y);
+    } else {
+      if (time >= this.predatorNextWanderAt) {
+        this.predatorNextWanderAt = time + Phaser.Math.Between(900, 1700);
+        this.predatorWanderAng = Phaser.Math.FloatBetween(-Math.PI, Math.PI);
+      }
+
+      const v = new Phaser.Math.Vector2(Math.cos(this.predatorWanderAng || 0), Math.sin(this.predatorWanderAng || 0))
+        .scale(this.predatorWanderSpeed);
+      this.predator.setVelocity(v.x, v.y);
+
+      this.predatorFacing = Phaser.Math.Angle.RotateTo(this.predatorFacing, (this.predatorWanderAng || 0), 0.02);
+    }
+
+    if (this.predator.body.velocity.x !== 0) {
+      this.predator.setFlipX(this.predator.body.velocity.x < 0);
+    }
+  }
+
+  _predatorCanSeePlayer(ex, ey, px, py, dist) {
+    if (dist > this.predatorRange) return false;
+
+    const angToPlayer = Math.atan2(py - ey, px - ex);
+    const delta = Phaser.Math.Angle.Wrap(angToPlayer - this.predatorFacing);
+    const halfFov = Phaser.Math.DegToRad(this.predatorFovDeg * 0.5);
+    if (Math.abs(delta) > halfFov) return false;
+
+    if (this.soilWalls && this.soilWalls.getChildren().length > 0) {
+      if (!this._hasLineOfSight(ex, ey, px, py)) return false;
+    }
+
+    return true;
+  }
+
+  _hasLineOfSight(x1, y1, x2, y2) {
+    const walls = this.soilWalls.getChildren();
+
+    for (let i = 0; i < walls.length; i++) {
+      const w = walls[i];
+      if (!w || !w.body) continue;
+
+      const left = w.body.x;
+      const top = w.body.y;
+      const right = w.body.x + w.body.width;
+      const bottom = w.body.y + w.body.height;
+
+      if (this._lineIntersectsRect(x1, y1, x2, y2, left, top, right, bottom)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  _lineIntersectsRect(x1, y1, x2, y2, left, top, right, bottom) {
+    const inside1 = (x1 >= left && x1 <= right && y1 >= top && y1 <= bottom);
+    const inside2 = (x2 >= left && x2 <= right && y2 >= top && y2 <= bottom);
+    if (inside1 || inside2) return true;
+
+    return (
+      this._lineSegIntersect(x1, y1, x2, y2, left, top, right, top) ||
+      this._lineSegIntersect(x1, y1, x2, y2, right, top, right, bottom) ||
+      this._lineSegIntersect(x1, y1, x2, y2, right, bottom, left, bottom) ||
+      this._lineSegIntersect(x1, y1, x2, y2, left, bottom, left, top)
+    );
+  }
+
+  _lineSegIntersect(x1, y1, x2, y2, x3, y3, x4, y4) {
+    const den = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+    if (den === 0) return false;
+
+    const t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / den;
+    const u = -((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / den;
+
+    return (t >= 0 && t <= 1 && u >= 0 && u <= 1);
+  }
+
+  _onHitPredator(player, predator) {
+    if (this._invulnUntil && this.time.now < this._invulnUntil) return;
+    this._invulnUntil = this.time.now + 650;
+
+    const baseDmg = 18;
+    let resist = this.registry.get("resist") || 0;
+    if (this.tun && this.tun.active) resist = Math.min(90, resist + 70);
+    const dmg = Math.max(1, Math.round(baseDmg * (1 - resist / 100)));
+
+    let hp = this.registry.get("hp");
+    hp = Phaser.Math.Clamp(hp - dmg, 0, this.registry.get("hpMax"));
+    this.registry.set("hp", hp);
+
+    this._emitNote(`Carnivorous tardigrade bit you! (-${dmg} HP)`);
+
+    const v = new Phaser.Math.Vector2(player.x - predator.x, player.y - predator.y).normalize().scale(320);
+    player.setVelocity(v.x, v.y);
+
+    if (hp <= 0) this._endRun("You were eaten.");
   }
 
   // -----------------------------
