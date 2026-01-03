@@ -60,6 +60,7 @@ class GameScene extends Phaser.Scene {
     // --- Input (keyboard + optional click-to-move) ---
     this.keys = this.input.keyboard.addKeys("W,A,S,D,UP,DOWN,LEFT,RIGHT,SHIFT");
     this.tunKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+    this.keyM = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.M);
     this.pointerMoveTarget = null;
     this.tun = {
       active: false,
@@ -106,6 +107,17 @@ class GameScene extends Phaser.Scene {
     this.predatorNextWanderAt = 0;
     this.predatorWarned = false;
 
+    // --- Audio ---
+    this.sfxEat = this.sound.add("sfx_eat", { volume: 0.6 });
+    this.sfxOuch = this.sound.add("sfx_ouch", { volume: 0.7 });
+    this._eatSfxNextAt = 0;
+    this._ouchSfxNextAt = 0;
+
+    this.bgmKeys = ["bgm1", "bgm2", "bgm3", "bgm4", "bgm5"];
+    this.bgm = null;
+    this.registry.set("musicIndex", 0);
+    this._setMusicByIndex(0);
+
     this.foodTimer = this.time.addEvent({
       delay: this.foodSpawnInterval,
       loop: true,
@@ -150,9 +162,10 @@ class GameScene extends Phaser.Scene {
   update(time, delta) {
     if (this.registry.get("runEnded")) return;
     if (this.registry.get("codexOpen")) {
-      this.player.setVelocity(0, 0);
+      this._applyCodexPause(true);
       return;
     }
+    this._applyCodexPause(false);
     const dt = delta / 1000;
 
     // End run at 20 minutes
@@ -176,6 +189,9 @@ class GameScene extends Phaser.Scene {
     this._updateNeeds(dt);
     this._updateMovement(dt);
     this._applyFoodMagnet(dt);
+    if (Phaser.Input.Keyboard.JustDown(this.keyM)) {
+      this._cycleMusic();
+    }
 
     // Death check
     if (this.registry.get("hp") <= 0) {
@@ -580,6 +596,7 @@ class GameScene extends Phaser.Scene {
   _onEatFood(player, food) {
     const key = food.texture.key;
     food.destroy();
+    this._playSfx("eat");
     if (key === "food_algae") this._unlockCodex("food_algae");
     else this._unlockCodex("food_proto");
 
@@ -627,6 +644,7 @@ class GameScene extends Phaser.Scene {
     if (this._invulnUntil && this.time.now < this._invulnUntil) return;
     this._invulnUntil = this.time.now + 550;
 
+    this._playSfx("ouch");
     const resistBase = this.registry.get("resist") || 0;
     let resist = resistBase;
     if (this.tun && this.tun.active) resist += 70;
@@ -726,13 +744,14 @@ class GameScene extends Phaser.Scene {
     this.registry.set("magnet", 0);
 
     this.registry.set("offspring", 0);
-    this.registry.set("reproThreshold", 3000);
+    this.registry.set("reproThreshold", 5000);
 
     this.registry.set("runEnded", false);
     this.registry.set("tunActive", false);
     this.registry.set("tunReadyInMs", 0);
     this.registry.set("tunEndsInMs", 0);
     this.registry.set("codexOpen", false);
+    this._codexPaused = false;
   }
 
   _initCodexIfNeeded() {
@@ -796,7 +815,7 @@ class GameScene extends Phaser.Scene {
       this.lastReproductionTime = this.time.now;
       if (offspring === 1) this._maybeSpawnPredator();
 
-      threshold += 3000;
+      threshold += 5000;
       this.registry.set("reproThreshold", threshold);
 
       this._emitNote(`Reproduction success! Egg laid 🥚 (Offspring: ${offspring})`);
@@ -949,6 +968,7 @@ class GameScene extends Phaser.Scene {
     if (this._invulnUntil && this.time.now < this._invulnUntil) return;
     this._invulnUntil = this.time.now + 650;
 
+    this._playSfx("ouch");
     const baseDmg = 18;
     let resist = this.registry.get("resist") || 0;
     if (this.tun && this.tun.active) resist = Math.min(90, resist + 70);
@@ -964,6 +984,69 @@ class GameScene extends Phaser.Scene {
     player.setVelocity(v.x, v.y);
 
     if (hp <= 0) this._endRun("You were eaten.");
+  }
+
+  _applyCodexPause(shouldPause) {
+    if (this._codexPaused === shouldPause) return;
+    this._codexPaused = shouldPause;
+
+    if (shouldPause) {
+      this.player.setVelocity(0, 0);
+
+      if (this.predator && this.predator.body) this.predator.setVelocity(0, 0);
+
+      if (this.hazards) {
+        this.hazards.children.iterate((h) => {
+          if (h && h.body) h.setVelocity(0, 0);
+        });
+      }
+
+      this.physics.world.pause();
+      this.time.paused = true;
+    } else {
+      this.physics.world.resume();
+      this.time.paused = false;
+    }
+  }
+
+  _playSfx(key) {
+    const now = this.time.now;
+
+    if (key === "eat") {
+      if (now < this._eatSfxNextAt) return;
+      this._eatSfxNextAt = now + 90;
+      if (this.sfxEat) this.sfxEat.play();
+    }
+
+    if (key === "ouch") {
+      if (now < this._ouchSfxNextAt) return;
+      this._ouchSfxNextAt = now + 180;
+      if (this.sfxOuch) this.sfxOuch.play();
+    }
+  }
+
+  _cycleMusic() {
+    const current = this.registry.get("musicIndex") || 0;
+    const next = (current + 1) % 6;
+    this._setMusicByIndex(next);
+
+    const label = (next === 5) ? "Music: OFF" : `Music: BGM${next + 1}`;
+    this.game.events.emit("ui:notify", { text: label, kind: "note" });
+  }
+
+  _setMusicByIndex(index) {
+    if (this.bgm) {
+      this.bgm.stop();
+      this.bgm.destroy();
+      this.bgm = null;
+    }
+
+    this.registry.set("musicIndex", index);
+    if (index === 5) return;
+
+    const key = this.bgmKeys[index];
+    this.bgm = this.sound.add(key, { loop: true, volume: 0.45 });
+    this.bgm.play();
   }
 
   // -----------------------------
@@ -998,6 +1081,7 @@ class GameScene extends Phaser.Scene {
     this.time.removeAllEvents();
     this.player.setVelocity(0, 0);
     this.physics.pause();
+    if (this.bgm) this.bgm.pause();
 
     const survivedMs = this.time.now - this.runStart;
     const offspring = this.registry.get("offspring");

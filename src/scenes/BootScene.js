@@ -16,6 +16,15 @@ class BootScene extends Phaser.Scene {
     this.load.image("haz_nematode", "assets/hazards/nematode.png");
     this.load.image("haz_amoeba", "assets/hazards/amoeba.png");
     this.load.image("haz_mite", "assets/hazards/mite.png");
+
+    // --- Audio ---
+    this.load.audio("sfx_eat", "assets/sounds/eat.wav");
+    this.load.audio("sfx_ouch", "assets/sounds/ouch.wav");
+    this.load.audio("bgm1", "assets/music/BGM1.wav");
+    this.load.audio("bgm2", "assets/music/BGM2.wav");
+    this.load.audio("bgm3", "assets/music/BGM3.wav");
+    this.load.audio("bgm4", "assets/music/BGM4.wav");
+    this.load.audio("bgm5", "assets/music/BGM5.wav");
   }
 
   create() {
