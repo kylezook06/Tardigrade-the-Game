@@ -19,6 +19,7 @@ class GameScene extends Phaser.Scene {
 
   create() {
     this._resetRunState();
+    this._initCodexIfNeeded();
     // --- World + camera ---
     this.physics.world.setBounds(0, 0, this.worldW, this.worldH);
 
@@ -95,10 +96,10 @@ class GameScene extends Phaser.Scene {
     this.predator = null;
     this.predatorSpawned = false;
     this.predatorUnlockMs = 120000;
-    this.predatorFovDeg = 70;
-    this.predatorRange = 520;
-    this.predatorSpeed = 170;
-    this.predatorWanderSpeed = 75;
+    this.predatorFovDeg = 85;
+    this.predatorRange = 780;
+    this.predatorSpeed = 210;
+    this.predatorWanderSpeed = 90;
     this.predatorTurnRate = 0.06;
     this.predatorNextWanderAt = 0;
     this.predatorWarned = false;
@@ -146,6 +147,10 @@ class GameScene extends Phaser.Scene {
 
   update(time, delta) {
     if (this.registry.get("runEnded")) return;
+    if (this.registry.get("codexOpen")) {
+      this.player.setVelocity(0, 0);
+      return;
+    }
     const dt = delta / 1000;
 
     // End run at 20 minutes
@@ -558,6 +563,8 @@ class GameScene extends Phaser.Scene {
   _onEatFood(player, food) {
     const key = food.texture.key;
     food.destroy();
+    if (key === "food_algae") this._unlockCodex("food_algae");
+    else this._unlockCodex("food_proto");
 
     const hungerMax = this.registry.get("hungerMax");
     let hunger = this.registry.get("hunger");
@@ -607,6 +614,9 @@ class GameScene extends Phaser.Scene {
     this.registry.set("hp", hp);
 
     const kindName = hazard.getData("kindName") || "Hazard";
+    if (kindName === "Nematode") this._unlockCodex("haz_nematode");
+    if (kindName === "Amoeba") this._unlockCodex("haz_amoeba");
+    if (kindName === "Mite") this._unlockCodex("haz_mite");
     this._emitNote(`${kindName} bumped you! (-${dmg} HP)`);
 
     // Knockback
@@ -686,6 +696,26 @@ class GameScene extends Phaser.Scene {
     this.registry.set("tunActive", false);
     this.registry.set("tunReadyInMs", 0);
     this.registry.set("tunEndsInMs", 0);
+    this.registry.set("codexOpen", false);
+  }
+
+  _initCodexIfNeeded() {
+    if (!this.registry.get("codex")) {
+      this.registry.set("codex", { entries: {} });
+    }
+  }
+
+  _unlockCodex(key) {
+    this._initCodexIfNeeded();
+    const codex = this.registry.get("codex");
+    codex.entries[key] = codex.entries[key] || { unlocked: false, seenAtMs: 0 };
+
+    if (!codex.entries[key].unlocked) {
+      codex.entries[key].unlocked = true;
+      codex.entries[key].seenAtMs = this.time.now - this.runStart;
+      this.registry.set("codex", codex);
+      this.game.events.emit("ui:codexUnlock", { key });
+    }
   }
 
   _applyAutoUpgrade() {
@@ -783,6 +813,7 @@ class GameScene extends Phaser.Scene {
       this.predatorWarned = true;
       this.game.events.emit("ui:notify", { text: "Warning: Carnivorous tardigrade detected!", kind: "fact" });
     }
+    this._unlockCodex("pred_carnivorous_tardigrade");
   }
 
   _updatePredator(time, dt) {
