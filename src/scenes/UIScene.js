@@ -30,7 +30,13 @@ class UIScene extends Phaser.Scene {
       color: "#cfe9ff"
     });
 
-    this.hud.add([this.title, this.bars, this.biomeText]);
+    this.tunText = this.add.text(0, 84, "", {
+      fontFamily: "Arial",
+      fontSize: "14px",
+      color: "#cfe9ff"
+    });
+
+    this.hud.add([this.title, this.bars, this.biomeText, this.tunText]);
 
     // Notification popup
     this.popupBg = this.add.rectangle(640, 660, 980, 70, 0x000000, 0.55).setScrollFactor(0).setDepth(1000);
@@ -84,6 +90,9 @@ class UIScene extends Phaser.Scene {
     const lvl = this.registry.get("level");
     const offspring = this.registry.get("offspring");
     const threshold = this.registry.get("reproThreshold");
+    const tunActive = this.registry.get("tunActive");
+    const tunReadyIn = this.registry.get("tunReadyInMs") || 0;
+    const tunEndsIn = this.registry.get("tunEndsInMs") || 0;
 
     const remaining = this.registry.get("timeRemainingMs") || 0;
     const mm = String(Math.floor(remaining / 60000)).padStart(2, "0");
@@ -93,6 +102,14 @@ class UIScene extends Phaser.Scene {
       `HP: ${hp}/${hpMax}   Hunger: ${hunger}/${hungerMax}   XP: ${xp}   Lvl: ${lvl}\n` +
       `Offspring: ${offspring}   Next egg at XP: ${threshold}   Time left: ${mm}:${ss}`
     );
+
+    if (tunActive) {
+      this.tunText.setText(`Tun: ACTIVE (${Math.ceil(tunEndsIn / 1000)}s) [SPACE]`);
+    } else if (tunReadyIn > 0) {
+      this.tunText.setText(`Tun: Cooldown (${Math.ceil(tunReadyIn / 1000)}s) [SPACE]`);
+    } else {
+      this.tunText.setText("Tun: Ready [SPACE]");
+    }
 
     // Restart
     if (Phaser.Input.Keyboard.JustDown(this.restartKey) && this.gameOverBg.visible) {

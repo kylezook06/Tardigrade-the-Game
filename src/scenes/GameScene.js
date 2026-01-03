@@ -55,7 +55,16 @@ class GameScene extends Phaser.Scene {
 
     // --- Input (keyboard + optional click-to-move) ---
     this.keys = this.input.keyboard.addKeys("W,A,S,D,UP,DOWN,LEFT,RIGHT,SHIFT");
+    this.tunKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
     this.pointerMoveTarget = null;
+    this.tun = {
+      active: false,
+      durationMs: 6000,
+      cooldownMs: 20000,
+      endsAt: 0,
+      readyAt: 0
+    };
+    this.tunUsedOnce = false;
 
     this.input.on("pointerdown", (p) => {
       // Set a world-space target for click-to-move
@@ -137,6 +146,7 @@ class GameScene extends Phaser.Scene {
     }
 
     this._resolveBiome();
+    this._updateTun(time);
     this._updateNeeds(dt);
     this._updateMovement(dt);
     this._applyFoodMagnet(dt);
@@ -156,7 +166,10 @@ class GameScene extends Phaser.Scene {
     let hunger = this.registry.get("hunger");
     const hungerMax = this.registry.get("hungerMax");
 
-    hunger -= (6.5 * this.hungerMult) * dt; // tweak for ~20-min run pacing
+    let hungerDrain = 6.5;
+    hungerDrain *= this.hungerMult;
+    if (this.tun && this.tun.active) hungerDrain *= 0.2;
+    hunger -= hungerDrain * dt; // tweak for ~20-min run pacing
     hunger = Phaser.Math.Clamp(hunger, 0, hungerMax);
     this.registry.set("hunger", hunger);
 
@@ -170,7 +183,8 @@ class GameScene extends Phaser.Scene {
   }
 
   _updateMovement(dt) {
-    const speed = this.registry.get("speed") * this.speedMult;
+    let speed = this.registry.get("speed") * this.speedMult;
+    if (this.tun && this.tun.active) speed *= 0.65;
 
     // Keyboard intent
     let vx = 0, vy = 0;
@@ -210,8 +224,8 @@ class GameScene extends Phaser.Scene {
     const pv = this.player.body.velocity;
     const moveSpeed = pv.length();
     const squash = Phaser.Math.Clamp(moveSpeed / 300, 0, 0.06);
-    const idle = this.player.idleScale || 1;
-    this.player.setScale(idle + squash, idle - squash);
+    const baseScale = (this.tun && this.tun.active) ? 0.88 : (this.player.idleScale || 1);
+    this.player.setScale(baseScale + squash, baseScale - squash);
 
     if (Math.abs(pv.x) > 1) this.player.setFlipX(pv.x < 0);
   }
@@ -562,7 +576,10 @@ class GameScene extends Phaser.Scene {
     if (this._invulnUntil && this.time.now < this._invulnUntil) return;
     this._invulnUntil = this.time.now + 550;
 
-    const resist = this.registry.get("resist") || 0;
+    const resistBase = this.registry.get("resist") || 0;
+    let resist = resistBase;
+    if (this.tun && this.tun.active) resist += 70;
+    resist = Math.min(resist, 90);
     const baseDmg = hazard.getData("damage") || 10;
     const dmg = Math.max(1, Math.round(baseDmg * (1 - resist / 100)));
 
@@ -576,6 +593,53 @@ class GameScene extends Phaser.Scene {
     // Knockback
     const v = new Phaser.Math.Vector2(player.x - hazard.x, player.y - hazard.y).normalize().scale(260);
     player.setVelocity(v.x, v.y);
+  }
+
+  _updateTun(time) {
+    if (Phaser.Input.Keyboard.JustDown(this.tunKey)) {
+      if (!this.tun.active && time >= this.tun.readyAt) {
+        this._enterTun(time);
+      } else {
+        const ms = Math.max(0, this.tun.readyAt - time);
+        if (ms > 0) {
+          this.game.events.emit("ui:notify", { text: `Tun recharging (${Math.ceil(ms / 1000)}s)`, kind: "note" });
+        }
+      }
+    }
+
+    if (this.tun.active && time >= this.tun.endsAt) {
+      this._exitTun();
+    }
+
+    this.registry.set("tunActive", this.tun.active);
+    this.registry.set("tunReadyInMs", Math.max(0, this.tun.readyAt - time));
+    this.registry.set("tunEndsInMs", Math.max(0, this.tun.endsAt - time));
+  }
+
+  _enterTun(time) {
+    this.tun.active = true;
+    this.tun.endsAt = time + this.tun.durationMs;
+    this.tun.readyAt = time + this.tun.durationMs + this.tun.cooldownMs;
+
+    this.player.setScale(0.88);
+    this.player.setAlpha(0.92);
+    this.player.setTint(0xbfd7ff);
+
+    if (!this.tunUsedOnce) {
+      this._emitNote("Tun state: tardigrades can suspend metabolism under extreme conditions.");
+      this.tunUsedOnce = true;
+    }
+    this.game.events.emit("ui:notify", { text: "Tun Mode: ACTIVE (cryptobiosis)", kind: "fact" });
+  }
+
+  _exitTun() {
+    this.tun.active = false;
+
+    this.player.setScale(1);
+    this.player.setAlpha(1);
+    this.player.clearTint();
+
+    this.game.events.emit("ui:notify", { text: "Tun Mode ended.", kind: "note" });
   }
 
   // -----------------------------
