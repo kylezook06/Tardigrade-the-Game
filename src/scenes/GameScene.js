@@ -96,7 +96,6 @@ class GameScene extends Phaser.Scene {
     // --- Timers ---
     this.runStart = this.time.now;
     this.lastReproductionTime = 0;
-    this.predatorUnlockMs = 120000;
     this.predators = this.physics.add.group();
     this.predatorIntervalMs = 120000;
     this.nextPredatorAt = this.runStart + this.predatorIntervalMs;
@@ -137,12 +136,6 @@ class GameScene extends Phaser.Scene {
       delay: 15000,
       loop: true,
       callback: () => this._emitRandomFact()
-    });
-
-    this.predatorCheckTimer = this.time.addEvent({
-      delay: 500,
-      loop: true,
-      callback: () => this._maybeSpawnPredator()
     });
 
     // Initial spawns
@@ -515,17 +508,61 @@ class GameScene extends Phaser.Scene {
 
     const maskGfx = this.make.graphics({ x: 0, y: 0, add: false });
     maskGfx.fillStyle(0xffffff, 1);
-    const jitter = 32;
+
+    const points = 32;
+    const rx = (w * 0.50) * 0.98;
+    const ry = (h * 0.50) * 0.98;
+    const noise = 0.14;
+    const seed = Phaser.Math.Between(0, 99999);
+
     maskGfx.beginPath();
-    maskGfx.moveTo(x - w / 2 + Phaser.Math.Between(-jitter, jitter), y - h / 2);
-    maskGfx.lineTo(x + w / 2 + Phaser.Math.Between(-jitter, jitter), y - h / 2);
-    maskGfx.lineTo(x + w / 2, y + h / 2 + Phaser.Math.Between(-jitter, jitter));
-    maskGfx.lineTo(x - w / 2 + Phaser.Math.Between(-jitter, jitter), y + h / 2);
+    for (let i = 0; i <= points; i++) {
+      const t = (i / points) * Math.PI * 2;
+      const n =
+        Math.sin(t * 2 + seed) * 0.55 +
+        Math.cos(t * 3 - seed * 0.7) * 0.35 +
+        Math.sin(t * 5 + seed * 0.13) * 0.25;
+
+      const rnx = rx * (1 + n * noise);
+      const rny = ry * (1 + n * noise);
+      const px = x + Math.cos(t) * rnx;
+      const py = y + Math.sin(t) * rny;
+
+      if (i === 0) maskGfx.moveTo(px, py);
+      else maskGfx.lineTo(px, py);
+    }
     maskGfx.closePath();
     maskGfx.fillPath();
-    const mask = maskGfx.createGeometryMask();
-    tiles.setMask(mask);
+
+    const geomMask = maskGfx.createGeometryMask();
+    tiles.setMask(geomMask);
+    edgeFade.setMask(geomMask);
+
+    const rim = this.add.graphics();
+    rim.fillStyle(0x000000, 0.10);
+    rim.beginPath();
+    for (let i = 0; i <= points; i++) {
+      const t = (i / points) * Math.PI * 2;
+      const n =
+        Math.sin(t * 2 + seed) * 0.55 +
+        Math.cos(t * 3 - seed * 0.7) * 0.35 +
+        Math.sin(t * 5 + seed * 0.13) * 0.25;
+
+      const rnx = (rx + 30) * (1 + n * noise);
+      const rny = (ry + 30) * (1 + n * noise);
+      const px = x + Math.cos(t) * rnx;
+      const py = y + Math.sin(t) * rny;
+
+      if (i === 0) rim.moveTo(px, py);
+      else rim.lineTo(px, py);
+    }
+    rim.closePath();
+    rim.fillPath();
+    rim.setDepth(0);
+    rim.setBlendMode(Phaser.BlendModes.MULTIPLY);
+
     this._biomeVisuals.push(maskGfx);
+    this._biomeVisuals.push(rim);
 
     const zone = this.add.zone(x, y, w, h);
     this.physics.add.existing(zone, true);
@@ -840,7 +877,6 @@ class GameScene extends Phaser.Scene {
       let offspring = (this.registry.get("offspring") || 0) + 1;
       this.registry.set("offspring", offspring);
       this.lastReproductionTime = this.time.now;
-      if (offspring === 1) this._maybeSpawnPredator();
 
       threshold += 5000;
       this.registry.set("reproThreshold", threshold);
@@ -850,19 +886,6 @@ class GameScene extends Phaser.Scene {
 
       if (offspring >= 4) {
         this._endRun("Lineage secured: 4 offspring produced.");
-      }
-    }
-  }
-
-  _maybeSpawnPredator() {
-    if (this.predators.getLength() >= this.maxPredators) return;
-    const elapsed = this.time.now - this.runStart;
-    const offspring = this.registry.get("offspring") || 0;
-
-    if (elapsed >= this.predatorUnlockMs || offspring >= 1) {
-      this._spawnPredator();
-      if (this.time.now >= this.nextPredatorAt) {
-        this.nextPredatorAt = this.time.now + this.predatorIntervalMs;
       }
     }
   }
