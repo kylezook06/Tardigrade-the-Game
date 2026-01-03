@@ -306,6 +306,7 @@ class GameScene extends Phaser.Scene {
       f.setDepth(3);
       const r = Math.max(6, Math.floor(Math.min(f.width, f.height) * 0.35));
       f.body.setCircle(r);
+      this._addFoodTween(f, key);
     }
   }
 
@@ -542,7 +543,7 @@ class GameScene extends Phaser.Scene {
     tiles.setMask(geomMask);
     edgeFade.setMask(geomMask);
 
-    const rim = this._drawFeatherRim(x, y, w, h, seed, 0.12, 18, 10, 3);
+    const rim = this._drawFeatherRim(x, y, w, h, seed, 0.08, 20, 12, 4);
 
     this._biomeVisuals.push(maskGfx);
     this._biomeVisuals.push(rim);
@@ -598,12 +599,28 @@ class GameScene extends Phaser.Scene {
 
     this._biomeVisuals.push(tile, maskGfx, rim);
 
-    const wall = this.add.zone(x, y, w, h);
-    this.physics.add.existing(wall, true);
-    wall.body.setSize(w, h);
-    wall.body.updateFromGameObject();
+    const blobs = 7;
+    const rxColl = (w * 0.5) * 0.72;
+    const ryColl = (h * 0.5) * 0.72;
 
-    this.soilWalls.add(wall);
+    for (let i = 0; i < blobs; i++) {
+      const t = (i / blobs) * Math.PI * 2;
+      const nx =
+        Math.sin(t * 2 + seed) * 0.55 +
+        Math.cos(t * 3 - seed * 0.7) * 0.35 +
+        Math.sin(t * 5 + seed * 0.13) * 0.25;
+
+      const px = x + Math.cos(t) * rxColl * (1 + nx * 0.10);
+      const py = y + Math.sin(t) * ryColl * (1 + nx * 0.10);
+
+      const r = Math.max(28, Math.floor(Math.min(w, h) * 0.18));
+      const node = this.add.zone(px, py, r * 2, r * 2);
+      this.physics.add.existing(node, true);
+      node.body.setCircle(r);
+      node.body.updateFromGameObject();
+
+      this.soilWalls.add(node);
+    }
   }
 
   _drawFeatherRim(x, y, w, h, seed, baseAlpha, expandStart, expandStep, rings) {
@@ -666,6 +683,42 @@ class GameScene extends Phaser.Scene {
     this._unlockCodex("biome_soil");
   }
 
+  _addFoodTween(sprite, kindKey) {
+    if (!sprite || sprite.getData("tweened")) return;
+    sprite.setData("tweened", true);
+
+    const phase = Phaser.Math.Between(0, 200);
+
+    this.tweens.add({
+      targets: sprite,
+      y: sprite.y - 3,
+      duration: 900 + phase,
+      yoyo: true,
+      repeat: -1,
+      ease: "Sine.easeInOut"
+    });
+
+    this.tweens.add({
+      targets: sprite,
+      alpha: { from: 0.92, to: 1.0 },
+      duration: 1100 + phase,
+      yoyo: true,
+      repeat: -1,
+      ease: "Sine.easeInOut"
+    });
+
+    if (kindKey === "food_proto") {
+      this.tweens.add({
+        targets: sprite,
+        angle: "+=3",
+        duration: 1200 + phase,
+        yoyo: true,
+        repeat: -1,
+        ease: "Sine.easeInOut"
+      });
+    }
+  }
+
   _addEnemyTween(sprite, kind) {
     if (!sprite || sprite.getData("tweened")) return;
     sprite.setData("tweened", true);
@@ -716,6 +769,32 @@ class GameScene extends Phaser.Scene {
         ease: "Sine.easeInOut"
       });
     }
+  }
+
+  _addPredatorBreathTween(predator) {
+    if (!predator || predator.getData("breathing")) return;
+    predator.setData("breathing", true);
+
+    const phase = Phaser.Math.Between(0, 250);
+
+    this.tweens.add({
+      targets: predator,
+      scaleX: predator.scaleX * 1.05,
+      scaleY: predator.scaleY * 0.97,
+      duration: 950 + phase,
+      yoyo: true,
+      repeat: -1,
+      ease: "Sine.easeInOut"
+    });
+
+    this.tweens.add({
+      targets: predator,
+      angle: "+=2",
+      duration: 1200 + phase,
+      yoyo: true,
+      repeat: -1,
+      ease: "Sine.easeInOut"
+    });
   }
 
   _hazardWander() {
@@ -900,7 +979,7 @@ class GameScene extends Phaser.Scene {
     this.registry.set("hp", 100);
 
     this.registry.set("hungerMax", 235);
-    this.registry.set("hunger", 235);
+    this.registry.set("hunger", 100);
 
     this.registry.set("xp", 0);
     this.registry.set("level", 1);
@@ -1007,6 +1086,7 @@ class GameScene extends Phaser.Scene {
     predator.setTint(0xff8888);
     predator.setScale(1.05);
     predator.setAlpha(0.95);
+    this._addPredatorBreathTween(predator);
 
     const r = Math.floor(predator.width * 0.30);
     predator.body.setCircle(r, predator.width / 2 - r, predator.height / 2 - r);
@@ -1022,7 +1102,7 @@ class GameScene extends Phaser.Scene {
 
     if (!this.predatorWarned) {
       this.predatorWarned = true;
-    this._emitFact("A carnivorous tardigrade enters the ecosystem.");
+      this._emitFact("A carnivorous tardigrade enters the ecosystem.");
     }
     this._emitFact("Some tardigrade species are carnivorous and hunt other microfauna (even other tardigrades).");
     this._unlockCodex("pred_carnivorous_tardigrade");
