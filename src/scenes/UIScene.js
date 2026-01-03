@@ -24,7 +24,13 @@ class UIScene extends Phaser.Scene {
       color: "#cfe9ff"
     });
 
-    this.hud.add([this.title, this.bars]);
+    this.biomeText = this.add.text(0, 62, "", {
+      fontFamily: "Arial",
+      fontSize: "14px",
+      color: "#cfe9ff"
+    });
+
+    this.hud.add([this.title, this.bars, this.biomeText]);
 
     // Notification popup
     this.popupBg = this.add.rectangle(640, 660, 980, 70, 0x000000, 0.55).setScrollFactor(0).setDepth(1000);
@@ -62,6 +68,10 @@ class UIScene extends Phaser.Scene {
     // Listen to GameScene events
     this.game.events.on("ui:notify", (payload) => this._enqueue(payload), this);
     this.game.events.on("ui:gameover", (payload) => this._showGameOver(payload), this);
+    this.game.events.on("ui:biome", ({ name }) => {
+      const label = (name === "open") ? "Open Water Film" : name[0].toUpperCase() + name.slice(1);
+      this.biomeText.setText(`Biome: ${label}`);
+    });
   }
 
   update() {

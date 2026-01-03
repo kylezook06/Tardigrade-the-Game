@@ -11,6 +11,10 @@ class GameScene extends Phaser.Scene {
     this.hazardSpawnInterval = 2600; // ms
 
     this.runLengthMs = 20 * 60 * 1000; // 20 minutes
+
+    this.currentBiome = "open";      // open | moss | lichen | soil
+    this.speedMult = 1.0;
+    this.hungerMult = 1.0;
   }
 
   create() {
@@ -63,6 +67,14 @@ class GameScene extends Phaser.Scene {
     this.food = this.physics.add.group({ immovable: true, allowGravity: false });
     this.hazards = this.physics.add.group({ immovable: false, allowGravity: false });
 
+    // --- Biomes ---
+    this.biomeZones = this.physics.add.staticGroup(); // overlap-only zones
+    this.soilWalls = this.physics.add.staticGroup();  // impassable obstacles
+
+    // Soil is solid
+    this.physics.add.collider(this.player, this.soilWalls);
+    this.physics.add.collider(this.hazards, this.soilWalls);
+
     // --- Collisions ---
     this.physics.add.overlap(this.player, this.food, this._onEatFood, null, this);
     this.physics.add.overlap(this.player, this.hazards, this._onHitHazard, null, this);
@@ -91,6 +103,7 @@ class GameScene extends Phaser.Scene {
     // Initial spawns
     this._spawnFood(14);
     for (let i = 0; i < 7; i++) this._spawnHazard();
+    this._createBiomes();
 
     // Teach the premise once
     this._emitNote("You are a tardigrade! Eat biofilm, avoid micro-predators, survive—and reproduce.");
@@ -117,6 +130,7 @@ class GameScene extends Phaser.Scene {
       return;
     }
 
+    this._resolveBiome();
     this._updateNeeds(dt);
     this._updateMovement(dt);
     this._applyFoodMagnet(dt);
@@ -136,7 +150,7 @@ class GameScene extends Phaser.Scene {
     let hunger = this.registry.get("hunger");
     const hungerMax = this.registry.get("hungerMax");
 
-    hunger -= 6.5 * dt; // tweak for ~20-min run pacing
+    hunger -= (6.5 * this.hungerMult) * dt; // tweak for ~20-min run pacing
     hunger = Phaser.Math.Clamp(hunger, 0, hungerMax);
     this.registry.set("hunger", hunger);
 
@@ -150,7 +164,7 @@ class GameScene extends Phaser.Scene {
   }
 
   _updateMovement(dt) {
-    const speed = this.registry.get("speed");
+    const speed = this.registry.get("speed") * this.speedMult;
 
     // Keyboard intent
     let vx = 0, vy = 0;
@@ -252,6 +266,74 @@ class GameScene extends Phaser.Scene {
     // initial drift
     const a = Phaser.Math.FloatBetween(0, Math.PI * 2);
     h.setVelocity(Math.cos(a) * pick.speed * 0.35, Math.sin(a) * pick.speed * 0.35);
+  }
+
+  // -----------------------------
+  // Biomes
+  // -----------------------------
+
+  _setBiome(name) {
+    if (this.currentBiome === name) return;
+    this.currentBiome = name;
+
+    if (name === "moss") {
+      this.speedMult = 1.08;
+      this.hungerMult = 0.90;
+    } else if (name === "lichen") {
+      this.speedMult = 0.95;
+      this.hungerMult = 0.85;
+    } else {
+      this.speedMult = 1.00;
+      this.hungerMult = 1.00;
+    }
+
+    this.game.events.emit("ui:biome", { name });
+  }
+
+  _resolveBiome() {
+    let found = null;
+
+    this.biomeZones.children.iterate((z) => {
+      if (!z) return;
+      if (this.physics.overlap(this.player, z)) {
+        found = z.getData("biome");
+      }
+    });
+
+    this._setBiome(found || "open");
+  }
+
+  _createBiomes() {
+    this._addBiomePatch(400, 380, 520, 420, "moss", 0x1f6f3a, 0.22);
+    this._addBiomePatch(1550, 520, 600, 460, "moss", 0x1f6f3a, 0.22);
+
+    this._addBiomePatch(520, 1500, 520, 460, "lichen", 0x6fa86f, 0.18);
+    this._addBiomePatch(1500, 1500, 620, 520, "lichen", 0x6fa86f, 0.18);
+
+    this._addSoilObstacle(950, 980, 540, 260);
+    this._addSoilObstacle(350, 1000, 260, 520);
+    this._addSoilObstacle(1780, 980, 260, 520);
+  }
+
+  _addBiomePatch(x, y, w, h, biomeName, color, alpha) {
+    const g = this.add.rectangle(x, y, w, h, color, alpha);
+    g.setDepth(1);
+
+    const z = this.biomeZones.create(x, y, null);
+    z.setSize(w, h);
+    z.setVisible(false);
+    z.refreshBody();
+    z.setData("biome", biomeName);
+  }
+
+  _addSoilObstacle(x, y, w, h) {
+    const g = this.add.rectangle(x, y, w, h, 0x3a2a1f, 0.38);
+    g.setDepth(2);
+
+    const wall = this.soilWalls.create(x, y, null);
+    wall.setSize(w, h);
+    wall.setVisible(false);
+    wall.refreshBody();
   }
 
   _hazardWander() {
