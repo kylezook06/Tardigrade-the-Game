@@ -107,6 +107,8 @@ class GameScene extends Phaser.Scene {
     this.predatorWanderSpeed = 90;
     this.predatorTurnRate = 0.06;
     this.predatorWarned = false;
+    this.recentFacts = [];
+    this.maxRecentFacts = 4;
 
     // --- Audio ---
     this.sfxEat = this.sound.add("sfx_eat", { volume: 0.6 });
@@ -367,7 +369,7 @@ class GameScene extends Phaser.Scene {
         lichen: "Lichen is a symbiosis: fungus + photosynthetic partner (algae or cyanobacteria).",
         open: "In thin water films, movement and feeding happen in a crowded world of microbes and microfauna."
       };
-      this.game.events.emit("ui:notify", { text: factByBiome[name] || factByBiome.open, kind: "fact" });
+      this._emitFact(factByBiome[name] || factByBiome.open);
     }
   }
 
@@ -505,6 +507,26 @@ class GameScene extends Phaser.Scene {
     this._biomeVisuals = this._biomeVisuals || [];
     this._biomeVisuals.push(tiles);
 
+    const edgeFade = this.add.tileSprite(x, y, w + 64, h + 64, tileKey);
+    edgeFade.setDepth(0);
+    edgeFade.setAlpha(0.18);
+    edgeFade.setBlendMode(Phaser.BlendModes.MULTIPLY);
+    this._biomeVisuals.push(edgeFade);
+
+    const maskGfx = this.make.graphics({ x: 0, y: 0, add: false });
+    maskGfx.fillStyle(0xffffff, 1);
+    const jitter = 32;
+    maskGfx.beginPath();
+    maskGfx.moveTo(x - w / 2 + Phaser.Math.Between(-jitter, jitter), y - h / 2);
+    maskGfx.lineTo(x + w / 2 + Phaser.Math.Between(-jitter, jitter), y - h / 2);
+    maskGfx.lineTo(x + w / 2, y + h / 2 + Phaser.Math.Between(-jitter, jitter));
+    maskGfx.lineTo(x - w / 2 + Phaser.Math.Between(-jitter, jitter), y + h / 2);
+    maskGfx.closePath();
+    maskGfx.fillPath();
+    const mask = maskGfx.createGeometryMask();
+    tiles.setMask(mask);
+    this._biomeVisuals.push(maskGfx);
+
     const zone = this.add.zone(x, y, w, h);
     this.physics.add.existing(zone, true);
     zone.body.setSize(w, h);
@@ -517,7 +539,8 @@ class GameScene extends Phaser.Scene {
   _addSoilObstacle(x, y, w, h) {
     const tile = this.add.tileSprite(x, y, w, h, "biome_soil");
     tile.setDepth(2);
-    tile.setAlpha(0.9);
+    tile.setAlpha(0.95);
+    tile.setTint(0xd6b08c);
     this._biomeVisuals = this._biomeVisuals || [];
     this._biomeVisuals.push(tile);
 
@@ -616,16 +639,19 @@ class GameScene extends Phaser.Scene {
         food_algae: "Biofilms are communities of microbes stuck to surfaces—like a living buffet.",
         food_proto: "Protozoa are single-celled predators and grazers—important in microbial food webs."
       };
-      this.game.events.emit("ui:notify", { text: facts[key] || "Micro-food fuels the whole ecosystem.", kind: "fact" });
+      this._emitFact(facts[key] || "Micro-food fuels the whole ecosystem.");
     }
 
     if (Math.random() < 0.45) this._emitRandomFact();
 
     // Upgrade pacing: every 80 XP
     const level = this.registry.get("level");
-    const nextLevelXP = level * 80;
+    const nextLevelXP = this.registry.get("nextLevelXp") || this._xpForNextLevel(level);
     if (xp >= nextLevelXP) {
-      this.registry.set("level", level + 1);
+      const nextLevel = level + 1;
+      this.registry.set("level", nextLevel);
+      this.registry.set("nextLevelXp", this._xpForNextLevel(nextLevel));
+      this._emitNote(`Level up! (${nextLevel})`);
       this._applyAutoUpgrade();
     }
 
@@ -663,7 +689,7 @@ class GameScene extends Phaser.Scene {
         Mite: "Mites are tiny arthropods; many thrive in moss and soil microhabitats."
       };
       if (facts[kindName]) {
-        this.game.events.emit("ui:notify", { text: facts[kindName], kind: "fact" });
+        this._emitFact(facts[kindName]);
       }
     }
 
@@ -706,7 +732,7 @@ class GameScene extends Phaser.Scene {
       this._emitNote("Tun state: tardigrades can suspend metabolism under extreme conditions.");
       this.tunUsedOnce = true;
     }
-    this.game.events.emit("ui:notify", { text: "Tun Mode: ACTIVE (cryptobiosis)", kind: "fact" });
+    this._emitFact("Tun Mode: ACTIVE (cryptobiosis)");
   }
 
   _exitTun() {
@@ -732,6 +758,7 @@ class GameScene extends Phaser.Scene {
 
     this.registry.set("xp", 0);
     this.registry.set("level", 1);
+    this.registry.set("nextLevelXp", this._xpForNextLevel(1));
 
     this.registry.set("speed", 220);
     this.registry.set("resist", 0);
@@ -796,6 +823,12 @@ class GameScene extends Phaser.Scene {
     this._emitRandomFact();
   }
 
+  _xpForNextLevel(level) {
+    if (level <= 5) return 120 + level * 40;
+    if (level <= 10) return 400 + level * 80;
+    return 1200 + level * level * 12;
+  }
+
   _checkReproduction() {
     const xp = this.registry.get("xp");
     let threshold = this.registry.get("reproThreshold");
@@ -857,9 +890,9 @@ class GameScene extends Phaser.Scene {
 
     if (!this.predatorWarned) {
       this.predatorWarned = true;
-    this.game.events.emit("ui:notify", { text: "A carnivorous tardigrade enters the ecosystem.", kind: "fact" });
+    this._emitFact("A carnivorous tardigrade enters the ecosystem.");
     }
-    this.game.events.emit("ui:notify", { text: "Some tardigrade species are carnivorous and hunt other microfauna (even other tardigrades).", kind: "fact" });
+    this._emitFact("Some tardigrade species are carnivorous and hunt other microfauna (even other tardigrades).");
     this._unlockCodex("pred_carnivorous_tardigrade");
   }
 
@@ -1063,6 +1096,18 @@ class GameScene extends Phaser.Scene {
     this.game.events.emit("ui:notify", { text, kind: "note" });
   }
 
+  _emitFact(text) {
+    if (!text) return;
+    if (this.recentFacts.includes(text)) return;
+
+    this.recentFacts.push(text);
+    if (this.recentFacts.length > this.maxRecentFacts) {
+      this.recentFacts.shift();
+    }
+
+    this.game.events.emit("ui:notify", { text, kind: "fact" });
+  }
+
   _emitRandomFact() {
     const facts = [
       "Tardigrades are also called “water bears.”",
@@ -1073,7 +1118,7 @@ class GameScene extends Phaser.Scene {
       "Not all tardigrades are peaceful: some species are predators of other microfauna.",
       "Their habitat includes moss, lichens, soil, and freshwater films."
     ];
-    this.game.events.emit("ui:notify", { text: Phaser.Utils.Array.GetRandom(facts), kind: "fact" });
+    this._emitFact(Phaser.Utils.Array.GetRandom(facts));
   }
 
   // -----------------------------
