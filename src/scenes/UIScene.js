@@ -70,9 +70,6 @@ class UIScene extends Phaser.Scene {
     }).setOrigin(0.5).setScrollFactor(0).setDepth(2002).setVisible(false);
 
     this.restartKey = this.input.keyboard.addKey("R");
-    this.codexOpen = false;
-    this.keyC = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.C);
-    this.keyESC = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
 
     // Listen to GameScene events
     this.game.events.on("ui:notify", (payload) => this._enqueue(payload), this);
@@ -82,47 +79,11 @@ class UIScene extends Phaser.Scene {
       this.biomeText.setText(`Biome: ${label}`);
     });
     this.game.events.on("ui:codexUnlock", () => {
-      if (!this.codexOpen) {
-        this._enqueue({ text: "Codex updated (press C)", kind: "note" });
-      }
+      this._enqueue({ text: "Codex updated (press C)", kind: "note" });
     });
-
-    this.codexBg = this.add.rectangle(0, 0, 760, 520, 0x000000, 0.78)
-      .setOrigin(0.5, 0.5)
-      .setScrollFactor(0)
-      .setDepth(1000)
-      .setVisible(false);
-
-    this.codexTitle = this.add.text(0, 0, "CODEX", {
-      fontFamily: "Arial",
-      fontSize: "26px",
-      color: "#ffffff"
-    }).setOrigin(0.5, 0.5).setScrollFactor(0).setDepth(1001).setVisible(false);
-
-    this.codexBody = this.add.text(0, 0, "", {
-      fontFamily: "Arial",
-      fontSize: "16px",
-      color: "#d7e7ff",
-      wordWrap: { width: 700 }
-    }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(1001).setVisible(false);
-
-    this.codexHint = this.add.text(0, 0, "C: close   ESC: close", {
-      fontFamily: "Arial",
-      fontSize: "14px",
-      color: "#b7c7dd"
-    }).setOrigin(0.5, 0.5).setScrollFactor(0).setDepth(1001).setVisible(false);
-
-    this._layoutCodex();
-    this.scale.on("resize", () => this._layoutCodex());
   }
 
   update() {
-    if (Phaser.Input.Keyboard.JustDown(this.keyC)) {
-      this._toggleCodex();
-    }
-    if (this.codexOpen && Phaser.Input.Keyboard.JustDown(this.keyESC)) {
-      this._toggleCodex(false);
-    }
     // Restart
     if (Phaser.Input.Keyboard.JustDown(this.restartKey) && this.gameOverBg.visible) {
       // Hide game over UI and restart game scene
@@ -246,68 +207,6 @@ class UIScene extends Phaser.Scene {
     this.showing = false;
     this.popupBg.setVisible(false);
     this.popupText.setVisible(false);
-  }
-
-  _layoutCodex() {
-    const w = this.scale.width;
-    const h = this.scale.height;
-    const cx = Math.floor(w / 2);
-    const cy = Math.floor(h / 2);
-
-    this.codexBg.setPosition(cx, cy);
-    this.codexTitle.setPosition(cx, cy - 220);
-    this.codexBody.setPosition(cx, cy - 180);
-    this.codexHint.setPosition(cx, cy + 225);
-  }
-
-  _toggleCodex(forceState) {
-    const open = (forceState === undefined) ? !this.codexOpen : forceState;
-    this.codexOpen = open;
-    this.registry.set("codexOpen", open);
-
-    this.codexBg.setVisible(open);
-    this.codexTitle.setVisible(open);
-    this.codexBody.setVisible(open);
-    this.codexHint.setVisible(open);
-
-    if (open) this._renderCodex();
-  }
-
-  _renderCodex() {
-    const codex = this.registry.get("codex");
-    const entries = (codex && codex.entries) ? codex.entries : {};
-
-    const lines = [];
-    lines.push("Unlocked entries:");
-    lines.push("");
-
-    const list = [
-      { key: "food_algae", title: "Algae / Biofilm", text: "Primary grazing food source in water films; boosts hunger steadily." },
-      { key: "food_proto", title: "Protozoa", text: "Protein-rich snack. Many microfauna prey on smaller protists." },
-      { key: "haz_nematode", title: "Nematode", text: "Roundworms common in soil/water films; some are predators or scavengers." },
-      { key: "haz_amoeba", title: "Amoeba", text: "Single-celled shapeshifters; engulf food via phagocytosis." },
-      { key: "haz_mite", title: "Mite", text: "Tiny arthropods; some live in moss/lichen microhabitats and can threaten microfauna." },
-      { key: "pred_carnivorous_tardigrade", title: "Carnivorous Tardigrade", text: "Not all tardigrades are peaceful—some species hunt and eat other microfauna (even other tardigrades)." }
-    ];
-
-    let unlockedAny = false;
-    for (const entry of list) {
-      if (entries[entry.key] && entries[entry.key].unlocked) {
-        unlockedAny = true;
-        lines.push(`• ${entry.title}`);
-        lines.push(`  ${entry.text}`);
-        lines.push("");
-      }
-    }
-
-    if (!unlockedAny) {
-      lines.length = 0;
-      lines.push("Codex is empty.");
-      lines.push("");
-      lines.push("Explore, eat, and survive to unlock facts.");
-    }
-
-    this.codexBody.setText(lines.join("\n"));
   }
 }
 

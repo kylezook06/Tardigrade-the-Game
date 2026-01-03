@@ -8,7 +8,7 @@ class GameScene extends Phaser.Scene {
     this.worldH = 2400;
 
     this.foodSpawnInterval = 1200;   // ms
-    this.hazardSpawnInterval = 2600; // ms
+    this.hazardSpawnInterval = 3500; // ms
 
     this.runLengthMs = 20 * 60 * 1000; // 20 minutes
 
@@ -20,6 +20,8 @@ class GameScene extends Phaser.Scene {
   create() {
     this._resetRunState();
     this._initCodexIfNeeded();
+    if (!this.scene.isActive("UIScene")) this.scene.launch("UIScene");
+    if (!this.scene.isActive("CodexScene")) this.scene.launch("CodexScene");
     // --- World + camera ---
     this.physics.world.setBounds(0, 0, this.worldW, this.worldH);
 
@@ -83,7 +85,7 @@ class GameScene extends Phaser.Scene {
     this.soilWalls = this.add.group();  // impassable obstacles
 
     // Soil is solid
-    this.physics.add.collider(this.player, this.soilWalls);
+    this.physics.add.collider(this.player, this.soilWalls, this._onPlayerHitsSoil, null, this);
     this.physics.add.collider(this.hazards, this.soilWalls, this._onHazardHitsSoil, null, this);
 
     // --- Collisions ---
@@ -130,7 +132,7 @@ class GameScene extends Phaser.Scene {
 
     // Initial spawns
     this._spawnFood(14);
-    for (let i = 0; i < 7; i++) this._spawnHazard();
+    for (let i = 0; i < 5; i++) this._spawnHazard();
     this._createBiomes();
 
     // Teach the premise once
@@ -288,6 +290,7 @@ class GameScene extends Phaser.Scene {
   }
 
   _spawnHazard() {
+    if (this.hazards.getLength() >= 18) return;
     const kinds = [
       { key: "haz_nematode", name: "Nematode", speed: 120, dmg: 10 },
       { key: "haz_amoeba", name: "Amoeba", speed: 95,  dmg: 12 },
@@ -324,15 +327,25 @@ class GameScene extends Phaser.Scene {
     if (name === "moss") {
       this.speedMult = 1.08;
       this.hungerMult = 0.90;
+      this._unlockCodex("biome_moss");
     } else if (name === "lichen") {
       this.speedMult = 0.95;
       this.hungerMult = 0.85;
+      this._unlockCodex("biome_lichen");
     } else {
       this.speedMult = 1.00;
       this.hungerMult = 1.00;
     }
 
     this.game.events.emit("ui:biome", { name });
+    if (Math.random() < 0.35) {
+      const factByBiome = {
+        moss: "Moss holds tiny water films between leaves—micro-habitats for rotifers, nematodes, and tardigrades.",
+        lichen: "Lichen is a symbiosis: fungus + photosynthetic partner (algae or cyanobacteria).",
+        open: "In thin water films, movement and feeding happen in a crowded world of microbes and microfauna."
+      };
+      this.game.events.emit("ui:notify", { text: factByBiome[name] || factByBiome.open, kind: "fact" });
+    }
   }
 
   _resolveBiome() {
@@ -522,6 +535,10 @@ class GameScene extends Phaser.Scene {
     }
   }
 
+  _onPlayerHitsSoil() {
+    this._unlockCodex("biome_soil");
+  }
+
   _hazardWander() {
     // Small chance for nearest hazards to “notice” you (simple pressure)
     const px = this.player.x, py = this.player.y;
@@ -583,6 +600,14 @@ class GameScene extends Phaser.Scene {
     this.registry.set("hunger", hunger);
     this.registry.set("xp", xp);
 
+    if (Math.random() < 0.30) {
+      const facts = {
+        food_algae: "Biofilms are communities of microbes stuck to surfaces—like a living buffet.",
+        food_proto: "Protozoa are single-celled predators and grazers—important in microbial food webs."
+      };
+      this.game.events.emit("ui:notify", { text: facts[key] || "Micro-food fuels the whole ecosystem.", kind: "fact" });
+    }
+
     if (Math.random() < 0.45) this._emitRandomFact();
 
     // Upgrade pacing: every 80 XP
@@ -618,6 +643,17 @@ class GameScene extends Phaser.Scene {
     if (kindName === "Amoeba") this._unlockCodex("haz_amoeba");
     if (kindName === "Mite") this._unlockCodex("haz_mite");
     this._emitNote(`${kindName} bumped you! (-${dmg} HP)`);
+
+    if (Math.random() < 0.35) {
+      const facts = {
+        Nematode: "Nematodes are among the most abundant animals on Earth; many live in soil and water films.",
+        Amoeba: "Amoebae move and feed using pseudopods, engulfing prey by phagocytosis.",
+        Mite: "Mites are tiny arthropods; many thrive in moss and soil microhabitats."
+      };
+      if (facts[kindName]) {
+        this.game.events.emit("ui:notify", { text: facts[kindName], kind: "fact" });
+      }
+    }
 
     // Knockback
     const v = new Phaser.Math.Vector2(player.x - hazard.x, player.y - hazard.y).normalize().scale(260);
@@ -813,6 +849,7 @@ class GameScene extends Phaser.Scene {
       this.predatorWarned = true;
       this.game.events.emit("ui:notify", { text: "Warning: Carnivorous tardigrade detected!", kind: "fact" });
     }
+    this.game.events.emit("ui:notify", { text: "Some tardigrade species are carnivorous and hunt other microfauna (even other tardigrades).", kind: "fact" });
     this._unlockCodex("pred_carnivorous_tardigrade");
   }
 
