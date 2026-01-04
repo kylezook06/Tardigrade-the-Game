@@ -14,10 +14,10 @@ class TitleScene extends Phaser.Scene {
     const panel = this.add.rectangle(w / 2, h / 2, 720, 560, 0x000000, 0.85);
     panel.setStrokeStyle(2, 0xffffff, 0.18);
 
-    let headerBottomY = (h / 2) - 180;
+    let headerBottomY = (h / 2) - 205;
 
     if (this.textures.exists("ui_logo")) {
-      const logo = this.add.image(w / 2, h / 2 - 190, "ui_logo");
+      const logo = this.add.image(w / 2, h / 2 - 215, "ui_logo");
       const maxW = 300;
       const maxH = 90;
       const s = Math.min(maxW / logo.width, maxH / logo.height);
@@ -25,7 +25,7 @@ class TitleScene extends Phaser.Scene {
       const displayH = logo.height * s;
       headerBottomY = logo.y + (displayH / 2);
     } else {
-      const title = this.add.text(w / 2, h / 2 - 190, "Tardigrade: The Game", {
+      const title = this.add.text(w / 2, h / 2 - 215, "Tardigrade: The Game", {
         fontFamily: "Arial",
         fontSize: "46px",
         color: "#ffffff"
@@ -33,7 +33,7 @@ class TitleScene extends Phaser.Scene {
       headerBottomY = title.y + (title.height / 2);
     }
 
-    this.add.text(w / 2, headerBottomY + 26, "Choose a mode", {
+    this.add.text(w / 2, headerBottomY + 6, "Choose a mode", {
       fontFamily: "Arial",
       fontSize: "18px",
       color: "#d7e6ff",

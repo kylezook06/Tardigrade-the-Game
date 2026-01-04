@@ -1166,6 +1166,9 @@ class GameScene extends Phaser.Scene {
     predator.setTint(0xff8888);
     predator.setScale(1.05);
     predator.setAlpha(0.95);
+    predator.setData("baseScale", predator.scaleX);
+    predator.setData("baseAlpha", predator.alpha);
+    predator.setData("baseTint", 0xff8888);
     this._addPredatorBreathTween(predator);
 
     const r = Math.floor(predator.width * 0.30);
@@ -1187,6 +1190,9 @@ class GameScene extends Phaser.Scene {
     }
     this._emitFact("Some tardigrade species are carnivorous and hunt other microfauna (even other tardigrades).");
     this._unlockCodex("pred_carnivorous_tardigrade");
+    if (this.extinction && this.extinction.started && !this.extinction.ended) {
+      this._setPredatorTun(predator, true);
+    }
   }
 
   _updatePredator(time, dt) {
@@ -1196,6 +1202,10 @@ class GameScene extends Phaser.Scene {
 
     this.predators.children.iterate((predator) => {
       if (!predator || !predator.active) return;
+      if (predator.getData("tun")) {
+        predator.setVelocity(0, 0);
+        return;
+      }
 
       const ex = predator.x, ey = predator.y;
       const toPlayer = new Phaser.Math.Vector2(px - ex, py - ey);
@@ -1286,6 +1296,7 @@ class GameScene extends Phaser.Scene {
       this.registry.set("freezeActive", true);
       this.registry.set("extinctionCountdownMs", 0);
       this.cameras.main.flash(250, 255, 255, 255);
+      this._setAllPredatorsTun(true);
 
       if (this.hazards) this.hazards.clear(true, true);
       if (this.hazardTimer) this.hazardTimer.paused = true;
@@ -1306,6 +1317,7 @@ class GameScene extends Phaser.Scene {
         this.extinction.ended = true;
         this.registry.set("freezeActive", false);
         this.registry.set("extinctionCountdownMs", 0);
+        this._setAllPredatorsTun(false);
 
         if (this.hazardTimer) this.hazardTimer.paused = false;
 
@@ -1317,6 +1329,33 @@ class GameScene extends Phaser.Scene {
         this._unlockCodex("tun_cryptobiosis");
         this._emitFact("Codex unlocked: Tun Mode — cryptobiosis lets tardigrades endure freezing and desiccation.");
       }
+    }
+  }
+
+  _setAllPredatorsTun(active) {
+    if (!this.predators) return;
+    this.predators.children.iterate((predator) => {
+      if (!predator) return;
+      this._setPredatorTun(predator, active);
+    });
+  }
+
+  _setPredatorTun(predator, active) {
+    if (!predator) return;
+    if (active) {
+      predator.setData("tun", true);
+      predator.setVelocity(0, 0);
+      predator.setScale((predator.getData("baseScale") || predator.scaleX) * 0.92);
+      predator.setAlpha(0.85);
+      predator.setTint(0xbfd7ff);
+    } else {
+      predator.setData("tun", false);
+      const baseScale = predator.getData("baseScale") || predator.scaleX;
+      const baseAlpha = predator.getData("baseAlpha") || 0.95;
+      const baseTint = predator.getData("baseTint") || 0xff8888;
+      predator.setScale(baseScale);
+      predator.setAlpha(baseAlpha);
+      predator.setTint(baseTint);
     }
   }
 
