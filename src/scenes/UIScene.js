@@ -150,7 +150,6 @@ class UIScene extends Phaser.Scene {
     const freezeActive = !!this.registry.get("freezeActive");
 
     const remaining = this.registry.get("timeRemainingMs") || 0;
-    const extinctionCountdown = this.registry.get("extinctionCountdownMs") || 0;
     const mm = String(Math.floor(remaining / 60000)).padStart(2, "0");
     const ss = String(Math.floor((remaining % 60000) / 1000)).padStart(2, "0");
 
