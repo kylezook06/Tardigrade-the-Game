@@ -1,4 +1,4 @@
-/* global Phaser, BootScene, GameScene, UIScene, CodexScene */
+/* global Phaser, BootScene, TitleScene, GameScene, UIScene, CodexScene */
 
 (function () {
   const config = {
@@ -19,7 +19,7 @@
       }
     },
     // Order matters, but BootScene will start the others.
-    scene: [BootScene, GameScene, UIScene, CodexScene]
+    scene: [BootScene, TitleScene, GameScene, UIScene, CodexScene]
   };
 
   new Phaser.Game(config);

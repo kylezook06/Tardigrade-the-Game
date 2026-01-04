@@ -57,8 +57,7 @@ class BootScene extends Phaser.Scene {
 
     if (!this.game.events) this.game.events = new Phaser.Events.EventEmitter();
 
-    this.scene.start("GameScene");
-    this.scene.launch("UIScene");
+    this.scene.start("TitleScene");
   }
 
   _ensureFallbackTexture(key, makeFn) {

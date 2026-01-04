@@ -172,11 +172,7 @@ class GameScene extends Phaser.Scene {
 
   update(time, delta) {
     if (this.registry.get("runEnded")) return;
-    if (this.registry.get("codexOpen")) {
-      this._applyCodexPause(true);
-      return;
-    }
-    this._applyCodexPause(false);
+    if (this.registry.get("codexOpen")) return;
     const dt = delta / 1000;
 
     const elapsedMs = time - this.runStart;
@@ -1054,7 +1050,6 @@ class GameScene extends Phaser.Scene {
     this.registry.set("codexOpen", false);
     this.registry.set("freezeActive", false);
     this.registry.set("extinctionCountdownMs", 0);
-    this._codexPaused = false;
   }
 
   _initCodexIfNeeded() {
@@ -1398,52 +1393,6 @@ class GameScene extends Phaser.Scene {
     if (Math.random() < 0.15) {
       this._emitFact("Carnivorous tardigrades will still graze on biofilm when prey isn’t available.");
     }
-  }
-
-  _applyCodexPause(shouldPause) {
-    if (shouldPause) {
-      if (this._codexPaused) return;
-      this._codexPaused = true;
-      this._pauseStartedAt = this.time.now;
-
-      this.player.setVelocity(0, 0);
-
-      if (this.predators) {
-        this.predators.children.iterate((predator) => {
-          if (predator && predator.body) predator.setVelocity(0, 0);
-        });
-      }
-
-      if (this.hazards) {
-        this.hazards.children.iterate((h) => {
-          if (h && h.body) h.setVelocity(0, 0);
-        });
-      }
-
-      this.physics.world.isPaused = true;
-      this.tweens.pauseAll();
-
-      const timers = [this.foodTimer, this.hazardTimer, this.factTimer, this._hazardWanderTimer];
-      timers.forEach((t) => { if (t) t.paused = true; });
-      return;
-    }
-
-    if (!this._codexPaused) return;
-    this._codexPaused = false;
-
-    const pausedMs = this.time.now - (this._pauseStartedAt || this.time.now);
-    this.runStart += pausedMs;
-    if (this.extinction) {
-      this.extinction.warnAtMs += pausedMs;
-      this.extinction.startAtMs += pausedMs;
-      if (this.extinction.endAtMs) this.extinction.endAtMs += pausedMs;
-    }
-
-    this.physics.world.isPaused = false;
-    this.tweens.resumeAll();
-
-    const timers = [this.foodTimer, this.hazardTimer, this.factTimer, this._hazardWanderTimer];
-    timers.forEach((t) => { if (t) t.paused = false; });
   }
 
   _playSfx(key) {

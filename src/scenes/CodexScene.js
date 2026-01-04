@@ -4,112 +4,161 @@ class CodexScene extends Phaser.Scene {
   constructor() {
     super({ key: "CodexScene" });
     this.isOpen = false;
+    this.scrollY = 0;
+    this.maxScroll = 0;
   }
 
   create() {
     this.keyC = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.C);
     this.keyESC = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
+    this.keyUP = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.UP);
+    this.keyDOWN = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.DOWN);
 
-    // Overlay UI
-    this.bg = this.add.rectangle(0, 0, 760, 520, 0x000000, 0.80)
+    this.dimmer = this.add.rectangle(0, 0, 10, 10, 0x000000, 0.45)
+      .setOrigin(0, 0)
+      .setScrollFactor(0)
+      .setDepth(900)
+      .setVisible(false);
+
+    this.panel = this.add.rectangle(0, 0, 760, 520, 0x000000, 0.82)
       .setOrigin(0.5)
       .setScrollFactor(0)
-      .setDepth(3000)
+      .setDepth(901)
       .setVisible(false);
 
     this.title = this.add.text(0, 0, "CODEX", {
       fontFamily: "Arial",
-      fontSize: "26px",
-      color: "#ffffff"
-    }).setOrigin(0.5).setScrollFactor(0).setDepth(3001).setVisible(false);
+      fontSize: "22px",
+      color: "#ffffff",
+      fontStyle: "bold"
+    }).setOrigin(0.5, 0)
+      .setScrollFactor(0)
+      .setDepth(902)
+      .setVisible(false);
+
+    this.viewport = { x: 0, y: 0, w: 700, h: 380 };
+
+    this.content = this.add.container(0, 0)
+      .setScrollFactor(0)
+      .setDepth(903)
+      .setVisible(false);
 
     this.body = this.add.text(0, 0, "", {
       fontFamily: "Arial",
       fontSize: "16px",
-      color: "#d7e7ff",
-      wordWrap: { width: 700 }
-    }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(3001).setVisible(false);
+      color: "#d7e6ff",
+      wordWrap: { width: this.viewport.w }
+    }).setOrigin(0, 0);
 
-    this.hint = this.add.text(0, 0, "C: close   ESC: close", {
+    this.content.add(this.body);
+
+    this.maskGfx = this.make.graphics({ x: 0, y: 0, add: false });
+    this.maskGfx.fillStyle(0xffffff, 1);
+    this.maskGfx.fillRect(0, 0, this.viewport.w, this.viewport.h);
+    this.contentMask = this.maskGfx.createGeometryMask();
+    this.content.setMask(this.contentMask);
+
+    this.hint = this.add.text(0, 0, "C / ESC to close • Mouse wheel or ↑/↓ to scroll", {
       fontFamily: "Arial",
       fontSize: "14px",
-      color: "#b7c7dd"
-    }).setOrigin(0.5).setScrollFactor(0).setDepth(3001).setVisible(false);
+      color: "#ffffff",
+      alpha: 0.85
+    }).setOrigin(0.5, 1)
+      .setScrollFactor(0)
+      .setDepth(904)
+      .setVisible(false);
 
-    this.codexScrollY = 0;
-    this.codexViewW = 700;
-    this.codexViewH = 360;
-    this.codexMaskGfx = this.make.graphics({ x: 0, y: 0, add: false });
-    this.codexMask = this.codexMaskGfx.createGeometryMask();
-    this.body.setMask(this.codexMask);
-
-    this.input.on("wheel", (pointer, over, dx, dy) => {
+    this.input.on("wheel", (pointer, dx, dy) => {
       if (!this.isOpen) return;
-      const bounds = this.body.getTextBounds();
-      const contentH = bounds.local.height || 0;
-      const maxScroll = Math.max(0, contentH - this.codexViewH);
-      this.codexScrollY = Phaser.Math.Clamp(this.codexScrollY + dy * 0.6, 0, maxScroll);
-      this._applyCodexScroll();
+      this._scrollBy(dy * 0.6);
     });
 
-    this._layout();
     this.scale.on("resize", () => this._layout());
+    this._layout();
+  }
+
+  _layout() {
+    const w = this.scale.width;
+    const h = this.scale.height;
+
+    this.dimmer.setSize(w, h);
+
+    this.panel.setPosition(w / 2, h / 2);
+    this.title.setPosition(w / 2, h / 2 - 240);
+
+    this.viewport.x = w / 2 - 350;
+    this.viewport.y = h / 2 - 190;
+
+    this.maskGfx.clear();
+    this.maskGfx.fillStyle(0xffffff, 1);
+    this.maskGfx.fillRect(this.viewport.x, this.viewport.y, this.viewport.w, this.viewport.h);
+
+    this.content.setPosition(this.viewport.x, this.viewport.y + this.scrollY);
+
+    this.hint.setPosition(w / 2, h / 2 + 250);
   }
 
   update() {
     if (Phaser.Input.Keyboard.JustDown(this.keyC)) {
-      this.toggle();
+      this.isOpen ? this.close() : this.open();
     }
     if (this.isOpen && Phaser.Input.Keyboard.JustDown(this.keyESC)) {
-      this.toggle(false);
+      this.close();
     }
+
+    if (!this.isOpen) return;
+
+    if (this.keyUP.isDown) this._scrollBy(-8);
+    if (this.keyDOWN.isDown) this._scrollBy(8);
   }
 
-  _layout() {
-    const cx = Math.floor(this.scale.width / 2);
-    const cy = Math.floor(this.scale.height / 2);
+  open() {
+    this.isOpen = true;
+    this.registry.set("codexOpen", true);
 
-    this.bg.setPosition(cx, cy);
-    this.title.setPosition(cx, cy - 220);
-    this.codexViewX = cx - (this.codexViewW / 2);
-    this.codexViewY = cy - 180;
-    this.body.setOrigin(0, 0);
-    this.body.setPosition(this.codexViewX, this.codexViewY);
+    if (this.scene.isActive("GameScene")) this.scene.pause("GameScene");
+    if (this.scene.isActive("UIScene")) this.scene.pause("UIScene");
 
-    this.codexMaskGfx.clear();
-    this.codexMaskGfx.fillStyle(0xffffff, 1);
-    this.codexMaskGfx.fillRect(this.codexViewX, this.codexViewY, this.codexViewW, this.codexViewH);
-    this.hint.setPosition(cx, cy + 225);
+    this._refreshText();
+    this._recalcScrollBounds();
+    this.scrollY = 0;
+    this._layout();
 
-    this._applyCodexScroll();
+    this.dimmer.setVisible(true);
+    this.panel.setVisible(true);
+    this.title.setVisible(true);
+    this.content.setVisible(true);
+    this.hint.setVisible(true);
   }
 
-  toggle(forceState) {
-    const open = (forceState === undefined) ? !this.isOpen : forceState;
-    this.isOpen = open;
+  close() {
+    this.isOpen = false;
+    this.registry.set("codexOpen", false);
 
-    this.registry.set("codexOpen", open);
+    if (this.scene.isPaused("GameScene")) this.scene.resume("GameScene");
+    if (this.scene.isPaused("UIScene")) this.scene.resume("UIScene");
 
-    this.bg.setVisible(open);
-    this.title.setVisible(open);
-    this.body.setVisible(open);
-    this.hint.setVisible(open);
-
-    if (open) {
-      this.codexScrollY = 0;
-      this.render();
-      this._applyCodexScroll();
-    }
+    this.dimmer.setVisible(false);
+    this.panel.setVisible(false);
+    this.title.setVisible(false);
+    this.content.setVisible(false);
+    this.hint.setVisible(false);
   }
 
-  _applyCodexScroll() {
-    if (this.codexViewY === undefined) return;
-    this.body.setY(this.codexViewY - (this.codexScrollY || 0));
+  _scrollBy(amount) {
+    this.scrollY -= amount;
+    this.scrollY = Phaser.Math.Clamp(this.scrollY, -this.maxScroll, 0);
+    this.content.y = this.viewport.y + this.scrollY;
   }
 
-  render() {
-    const codex = this.registry.get("codex");
-    const entries = (codex && codex.entries) ? codex.entries : {};
+  _recalcScrollBounds() {
+    const textH = this.body.height;
+    this.maxScroll = Math.max(0, textH - this.viewport.h);
+  }
+
+  _refreshText() {
+    const codex = this.registry.get("codex") || {};
+    const entries = codex.entries || {};
 
     const catalog = [
       { key: "food_algae", title: "Algae / Biofilm", text: "Primary grazing food source in water films; boosts hunger steadily." },
@@ -118,32 +167,29 @@ class CodexScene extends Phaser.Scene {
       { key: "haz_amoeba", title: "Amoeba", text: "Single-celled shapeshifters; engulf food via phagocytosis." },
       { key: "haz_mite", title: "Mite", text: "Tiny arthropods; many thrive in moss and soil microhabitats." },
       { key: "pred_carnivorous_tardigrade", title: "Carnivorous Tardigrade", text: "Some tardigrades are predators of other microfauna (even other tardigrades)." },
-      { key: "tun_cryptobiosis", title: "Tun Mode", text: "Cryptobiosis lets tardigrades endure freezing and desiccation by suspending metabolism." },
       { key: "biome_moss", title: "Moss", text: "A micro-forest. Water films between leaves create habitats for microfauna." },
       { key: "biome_lichen", title: "Lichen", text: "Fungus + algae partnership. Rough terrain with pockets of moisture." },
-      { key: "biome_soil", title: "Soil", text: "Dense particle maze. Great shelter—and a wall you can’t pass through." }
+      { key: "biome_soil", title: "Soil", text: "Dense particle maze. Great shelter—and a wall you can’t pass through." },
+      { key: "tun_cryptobiosis", title: "Tun Mode", text: "Cryptobiosis lets tardigrades endure freezing and desiccation by suspending metabolism." }
     ];
 
     const lines = [];
-    let unlockedAny = false;
+    let any = false;
 
-    lines.push("Unlocked entries:");
-    lines.push("");
-
-    for (const item of catalog) {
+    catalog.forEach((item) => {
       if (entries[item.key] && entries[item.key].unlocked) {
-        unlockedAny = true;
-        lines.push(`• ${item.title}`);
-        lines.push(`  ${item.text}`);
+        any = true;
+        lines.push(item.title);
+        lines.push("----------------------------------------");
+        lines.push(item.text);
         lines.push("");
       }
-    }
+    });
 
-    if (!unlockedAny) {
-      lines.length = 0;
+    if (!any) {
       lines.push("Codex is empty.");
       lines.push("");
-      lines.push("Explore, eat, and survive to unlock facts.");
+      lines.push("Explore, eat, and survive to unlock fact entries.");
     }
 
     this.body.setText(lines.join("\n"));
