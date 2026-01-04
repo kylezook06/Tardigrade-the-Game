@@ -80,6 +80,13 @@ class UIScene extends Phaser.Scene {
       .setDepth(1101)
       .setVisible(false);
 
+    this.iceCracks = this.add.image(0, 0, "ice_cracks")
+      .setOrigin(0)
+      .setScrollFactor(0)
+      .setDepth(1103)
+      .setVisible(false)
+      .setAlpha(0);
+
     // Game over panel
     this.gameOverBg = this.add.rectangle(640, 360, 820, 420, 0x000000, 0.72)
       .setScrollFactor(0).setDepth(2000).setVisible(false);
@@ -113,9 +120,11 @@ class UIScene extends Phaser.Scene {
 
     this._layoutFreezeWarning();
     this._layoutFreezeFx();
+    this._layoutCracks();
     this.scale.on("resize", () => {
       this._layoutFreezeWarning();
       this._layoutFreezeFx();
+      this._layoutCracks();
     });
   }
 
@@ -163,9 +172,35 @@ class UIScene extends Phaser.Scene {
       this.freezeVignette.setVisible(true);
       this.freezeTint.setFillStyle(0x9fd6ff, 0.18);
       this.freezeVignette.setFillStyle(0x000000, 0.10);
+      if (!this.iceCracks.visible) {
+        this.iceCracks.setVisible(true);
+        this.tweens.add({
+          targets: this.iceCracks,
+          alpha: { from: 0.0, to: 0.55 },
+          duration: 300,
+          ease: "Sine.easeOut"
+        });
+        this.tweens.add({
+          targets: this.iceCracks,
+          alpha: { from: 0.45, to: 0.6 },
+          duration: 900,
+          yoyo: true,
+          repeat: -1,
+          ease: "Sine.easeInOut"
+        });
+      }
     } else {
       this.freezeTint.setVisible(false);
       this.freezeVignette.setVisible(false);
+      if (this.iceCracks.visible) {
+        this.tweens.killTweensOf(this.iceCracks);
+        this.tweens.add({
+          targets: this.iceCracks,
+          alpha: 0,
+          duration: 250,
+          onComplete: () => this.iceCracks.setVisible(false)
+        });
+      }
     }
 
     if (extinctionCountdown > 0) {
@@ -295,6 +330,12 @@ class UIScene extends Phaser.Scene {
   _layoutFreezeFx() {
     this.freezeTint.setSize(this.scale.width, this.scale.height);
     this.freezeVignette.setSize(this.scale.width, this.scale.height);
+  }
+
+  _layoutCracks() {
+    const sx = this.scale.width / this.iceCracks.width;
+    const sy = this.scale.height / this.iceCracks.height;
+    this.iceCracks.setScale(sx, sy);
   }
 }
 
