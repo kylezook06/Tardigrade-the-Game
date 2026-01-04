@@ -84,6 +84,7 @@ class CodexScene extends Phaser.Scene {
       { key: "haz_amoeba", title: "Amoeba", text: "Single-celled shapeshifters; engulf food via phagocytosis." },
       { key: "haz_mite", title: "Mite", text: "Tiny arthropods; many thrive in moss and soil microhabitats." },
       { key: "pred_carnivorous_tardigrade", title: "Carnivorous Tardigrade", text: "Some tardigrades are predators of other microfauna (even other tardigrades)." },
+      { key: "tun_cryptobiosis", title: "Tun Mode", text: "Cryptobiosis lets tardigrades endure freezing and desiccation by suspending metabolism." },
       { key: "biome_moss", title: "Moss", text: "A micro-forest. Water films between leaves create habitats for microfauna." },
       { key: "biome_lichen", title: "Lichen", text: "Fungus + algae partnership. Rough terrain with pockets of moisture." },
       { key: "biome_soil", title: "Soil", text: "Dense particle maze. Great shelter—and a wall you can’t pass through." }

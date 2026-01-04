@@ -97,9 +97,9 @@ class GameScene extends Phaser.Scene {
     this.runStart = this.time.now;
     this.lastReproductionTime = 0;
     this.predators = this.physics.add.group();
-    this.predatorIntervalMs = 120000;
-    this.nextPredatorAt = this.runStart + this.predatorIntervalMs;
-    this.maxPredators = 3;
+    this.predatorSchedule = [2, 4, 6, 12, 14, 16].map((m) => m * 60 * 1000);
+    this.predatorScheduleIndex = 0;
+    this.maxPredators = 6;
     this.predatorFovDeg = 85;
     this.predatorRange = 780;
     this.predatorSpeed = 210;
@@ -111,20 +111,17 @@ class GameScene extends Phaser.Scene {
     this.recentFacts = [];
     this.maxRecentFacts = 4;
     this.maxHazards = 26;
+    this._lastEatMsgAt = -999999;
+    this._lastHitMsgAt = -999999;
     // --- Mass Extinction Event (freeze) ---
     this.extinction = {
       warned: false,
       started: false,
       ended: false,
       startAtMs: this.runStart + (10 * 60 * 1000),
-      warnAtMs: this.runStart + (9.5 * 60 * 1000),
+      warnAtMs: this.runStart + (10 * 60 * 1000) - (15 * 1000),
       endAtMs: 0,
       dps: 14
-    };
-    this.postEventPredatorSpawns = {
-      done12: false,
-      done14: false,
-      done16: false
     };
 
     // --- Audio ---
@@ -182,9 +179,13 @@ class GameScene extends Phaser.Scene {
     this._applyCodexPause(false);
     const dt = delta / 1000;
 
-    if (time >= this.nextPredatorAt && this.predators.getLength() < this.maxPredators) {
-      this._spawnPredator();
-      this.nextPredatorAt += this.predatorIntervalMs;
+    const elapsed = time - this.runStart;
+    while (
+      this.predatorScheduleIndex < this.predatorSchedule.length &&
+      elapsed >= this.predatorSchedule[this.predatorScheduleIndex]
+    ) {
+      if (this.predators.getLength() < this.maxPredators) this._spawnPredator();
+      this.predatorScheduleIndex++;
     }
 
     // End run at 20 minutes
@@ -204,6 +205,10 @@ class GameScene extends Phaser.Scene {
 
     this._resolveBiome();
     this._updateExtinctionEvent(time, delta);
+    if (this.extinction && !this.extinction.started) {
+      const msLeft = this.extinction.startAtMs - time;
+      this.registry.set("extinctionCountdownMs", (msLeft <= 15000 && msLeft > 0) ? msLeft : 0);
+    }
     this._updateTun(time);
     this._updatePredator(time, dt);
     this._updateNeeds(dt);
@@ -894,11 +899,17 @@ class GameScene extends Phaser.Scene {
     if (key === "food_algae") {
       hunger = Phaser.Math.Clamp(hunger + 20, 0, hungerMax);
       xp += 10;
-      this._emitNote("Nom! Algae/biofilm consumed (+Hunger, +XP).");
+      if (this.time.now - this._lastEatMsgAt >= 30000) {
+        this._emitNote("Nom! Algae/biofilm consumed (+Hunger, +XP).");
+        this._lastEatMsgAt = this.time.now;
+      }
     } else {
       hunger = Phaser.Math.Clamp(hunger + 14, 0, hungerMax);
       xp += 16;
-      this._emitNote("Crunch! Protozoa snack (+XP, +Hunger).");
+      if (this.time.now - this._lastEatMsgAt >= 30000) {
+        this._emitNote("Crunch! Protozoa snack (+XP, +Hunger).");
+        this._lastEatMsgAt = this.time.now;
+      }
     }
 
     this.registry.set("hunger", hunger);
@@ -950,7 +961,10 @@ class GameScene extends Phaser.Scene {
     if (kindName === "Nematode") this._unlockCodex("haz_nematode");
     if (kindName === "Amoeba") this._unlockCodex("haz_amoeba");
     if (kindName === "Mite") this._unlockCodex("haz_mite");
-    this._emitNote(`${kindName} bumped you! (-${dmg} HP)`);
+    if (this.time.now - this._lastHitMsgAt >= 30000) {
+      this._emitNote(`${kindName} bumped you! (-${dmg} HP)`);
+      this._lastHitMsgAt = this.time.now;
+    }
 
     if (Math.random() < 0.35) {
       const facts = {
@@ -1176,6 +1190,7 @@ class GameScene extends Phaser.Scene {
         const v = new Phaser.Math.Vector2(Math.cos(nextFacing), Math.sin(nextFacing))
           .scale(this.predatorSpeed);
         predator.setVelocity(v.x, v.y);
+        this._set8WayFacing(predator, v.x, v.y);
       } else {
         if (Math.random() < 0.25 && this.food && this.food.getLength() > 0) {
           let closest = null;
@@ -1206,14 +1221,12 @@ class GameScene extends Phaser.Scene {
         const v = new Phaser.Math.Vector2(Math.cos(wanderAng), Math.sin(wanderAng))
           .scale(this.predatorWanderSpeed);
         predator.setVelocity(v.x, v.y);
+        this._set8WayFacing(predator, v.x, v.y);
 
         const nextFacing = Phaser.Math.Angle.RotateTo(facing, wanderAng, 0.02);
         predator.setData("facing", nextFacing);
       }
 
-      if (predator.body.velocity.x !== 0) {
-        predator.setFlipX(predator.body.velocity.x < 0);
-      }
     });
   }
 
@@ -1228,7 +1241,7 @@ class GameScene extends Phaser.Scene {
 
     if (!this.extinction.started && time >= this.extinction.startAtMs) {
       this.extinction.started = true;
-      this.extinction.endAtMs = time + Math.max(1500, (this.tun.durationMs - 500));
+      this.extinction.endAtMs = time + Math.max(4000, (this.tun.durationMs - 800));
       this.cameras.main.flash(250, 255, 255, 255);
 
       if (this.hazards) this.hazards.clear(true, true);
@@ -1256,26 +1269,8 @@ class GameScene extends Phaser.Scene {
 
         this._emitNote("🌡️ Freeze passes. The ecosystem rebounds… violently.");
         this._emitFact("Boom-bust cycles can happen in microhabitats as conditions shift and survivors repopulate.");
-      }
-    }
-
-    if (this.extinction.ended) {
-      const elapsedMin = (time - this.runStart) / 60000;
-
-      if (elapsedMin >= 12 && !this.postEventPredatorSpawns.done12) {
-        this.postEventPredatorSpawns.done12 = true;
-        this._spawnPredatorBurst(3);
-        this._emitNote("Predators return to the hunt (12:00).");
-      }
-      if (elapsedMin >= 14 && !this.postEventPredatorSpawns.done14) {
-        this.postEventPredatorSpawns.done14 = true;
-        this._spawnPredatorBurst(3);
-        this._emitNote("More predators emerge (14:00).");
-      }
-      if (elapsedMin >= 16 && !this.postEventPredatorSpawns.done16) {
-        this.postEventPredatorSpawns.done16 = true;
-        this._spawnPredatorBurst(3);
-        this._emitNote("Final wave of predators (16:00).");
+        this._unlockCodex("tun_cryptobiosis");
+        this._emitFact("Codex unlocked: Tun Mode — cryptobiosis lets tardigrades endure freezing and desiccation.");
       }
     }
   }
@@ -1343,6 +1338,15 @@ class GameScene extends Phaser.Scene {
     return (dx * dx + dy * dy) <= r * r;
   }
 
+  _set8WayFacing(sprite, vx, vy) {
+    if (!sprite || (vx === 0 && vy === 0)) return;
+    const ang = Math.atan2(vy, vx);
+    const step = Math.PI / 4;
+    const snapped = Math.round(ang / step) * step;
+    sprite.setRotation(snapped);
+    sprite.setFlipX(false);
+  }
+
   _onHitPredator(player, predator) {
     if (this._invulnUntil && this.time.now < this._invulnUntil) return;
     this._invulnUntil = this.time.now + 650;
@@ -1357,7 +1361,10 @@ class GameScene extends Phaser.Scene {
     hp = Phaser.Math.Clamp(hp - dmg, 0, this.registry.get("hpMax"));
     this.registry.set("hp", hp);
 
-    this._emitNote(`Carnivorous tardigrade bit you! (-${dmg} HP)`);
+      if (this.time.now - this._lastHitMsgAt >= 30000) {
+        this._emitNote(`Carnivorous tardigrade bit you! (-${dmg} HP)`);
+        this._lastHitMsgAt = this.time.now;
+      }
 
     const v = new Phaser.Math.Vector2(player.x - predator.x, player.y - predator.y).normalize().scale(320);
     player.setVelocity(v.x, v.y);
@@ -1406,7 +1413,6 @@ class GameScene extends Phaser.Scene {
 
     const pausedMs = this.time.now - (this._pauseStartedAt || this.time.now);
     this.runStart += pausedMs;
-    if (this.nextPredatorAt) this.nextPredatorAt += pausedMs;
     if (this.extinction) {
       this.extinction.warnAtMs += pausedMs;
       this.extinction.startAtMs += pausedMs;

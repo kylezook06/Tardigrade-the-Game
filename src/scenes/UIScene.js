@@ -112,6 +112,7 @@ class UIScene extends Phaser.Scene {
     const tunEndsIn = this.registry.get("tunEndsInMs") || 0;
 
     const remaining = this.registry.get("timeRemainingMs") || 0;
+    const extinctionCountdown = this.registry.get("extinctionCountdownMs") || 0;
     const mm = String(Math.floor(remaining / 60000)).padStart(2, "0");
     const ss = String(Math.floor((remaining % 60000) / 1000)).padStart(2, "0");
 
@@ -120,13 +121,17 @@ class UIScene extends Phaser.Scene {
       `Offspring: ${offspring}   Next egg at XP: ${threshold}   Time left: ${mm}:${ss}`
     );
 
-    if (tunActive) {
+    if (extinctionCountdown > 0) {
+      const sec = Math.ceil(extinctionCountdown / 1000);
+      this.tunText.setText(`Freeze in: ${sec}s — enter Tun [SPACE]`);
+    } else if (tunActive) {
       this.tunText.setText(`Tun: ACTIVE (${Math.ceil(tunEndsIn / 1000)}s) [SPACE]`);
     } else if (tunReadyIn > 0) {
       this.tunText.setText(`Tun: Cooldown (${Math.ceil(tunReadyIn / 1000)}s) [SPACE]`);
     } else {
       this.tunText.setText("Tun: Ready [SPACE]");
     }
+
 
     // Pump queue
     if (!this.showing && this.queue.length > 0 && !this.gameOverBg.visible) {
