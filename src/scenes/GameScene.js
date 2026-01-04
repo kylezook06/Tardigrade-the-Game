@@ -17,6 +17,27 @@ class GameScene extends Phaser.Scene {
     this.hungerMult = 1.0;
   }
 
+  init(data) {
+    this.gameMode = (data && data.mode) || this.registry.get("gameMode") || "normal";
+
+    if (this.gameMode === "short") {
+      this.countdown = false;
+      this.targetOffspring = 1;
+      this.runLengthMs = 15 * 60 * 1000;
+    } else if (this.gameMode === "infinite") {
+      this.countdown = false;
+      this.targetOffspring = Infinity;
+      this.runLengthMs = Infinity;
+    } else {
+      this.gameMode = "normal";
+      this.countdown = true;
+      this.targetOffspring = 4;
+      this.runLengthMs = 20 * 60 * 1000;
+    }
+
+    this.registry.set("gameMode", this.gameMode);
+  }
+
   create() {
     this._resetRunState();
     this._initCodexIfNeeded();
@@ -176,6 +197,7 @@ class GameScene extends Phaser.Scene {
     const dt = delta / 1000;
 
     const elapsedMs = time - this.runStart;
+    this.registry.set("timeElapsedMs", elapsedMs);
     while (
       this.predatorScheduleIndex < this.predatorSchedule.length &&
       elapsedMs >= this.predatorSchedule[this.predatorScheduleIndex]
@@ -185,10 +207,15 @@ class GameScene extends Phaser.Scene {
     }
 
     // End run at 20 minutes
-    const remaining = Math.max(0, this.runLengthMs - elapsedMs);
-    this.registry.set("timeRemainingMs", remaining);
+    if (this.countdown) {
+      const remaining = Math.max(0, this.runLengthMs - elapsedMs);
+      this.registry.set("timeRemainingMs", remaining);
+    } else {
+      this.registry.set("timeRemainingMs", -1);
+    }
+    const remaining = this.registry.get("timeRemainingMs");
 
-    if (remaining <= 0) {
+    if (this.countdown && remaining <= 0) {
       const offspring = this.registry.get("offspring");
       if (offspring > 0) {
         this._endRun("Observation complete. Reproduction successful.");
@@ -529,8 +556,9 @@ class GameScene extends Phaser.Scene {
 
     const edgeFade = this.add.tileSprite(x, y, w + 64, h + 64, tileKey);
     edgeFade.setDepth(0);
-    edgeFade.setAlpha(0.18);
-    edgeFade.setBlendMode(Phaser.BlendModes.MULTIPLY);
+    const isSoftBiome = (biomeName === "moss" || biomeName === "lichen");
+    edgeFade.setAlpha(isSoftBiome ? 0.10 : 0.18);
+    edgeFade.setBlendMode(isSoftBiome ? Phaser.BlendModes.NORMAL : Phaser.BlendModes.MULTIPLY);
     this._biomeVisuals.push(edgeFade);
 
     const maskGfx = this.make.graphics({ x: 0, y: 0, add: false });
@@ -567,7 +595,7 @@ class GameScene extends Phaser.Scene {
 
     const rim = this._drawFeatherRim(
       x, y, w, h, seed,
-      0.06,
+      0.05,
       20, 12, 4,
       Phaser.BlendModes.NORMAL
     );
@@ -1124,8 +1152,8 @@ class GameScene extends Phaser.Scene {
       this._emitNote(`Reproduction success! Egg laid 🥚 (Offspring: ${offspring})`);
       this._emitNote("Science note: Some tardigrades can reproduce via parthenogenesis depending on species.");
 
-      if (offspring >= 4) {
-        this._endRun("Lineage secured: 4 offspring produced.");
+      if (offspring >= this.targetOffspring) {
+        this._endRun(`Lineage secured: ${offspring} offspring produced.`);
       }
     }
   }

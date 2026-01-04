@@ -99,13 +99,14 @@ class UIScene extends Phaser.Scene {
       wordWrap: { width: 760 }
     }).setOrigin(0.5).setScrollFactor(0).setDepth(2001).setVisible(false);
 
-    this.restartHint = this.add.text(640, 540, "Press R to restart", {
+    this.restartHint = this.add.text(640, 540, "Press R to restart • T for Title", {
       fontFamily: "Arial",
       fontSize: "16px",
       color: "#cfe9ff"
     }).setOrigin(0.5).setScrollFactor(0).setDepth(2002).setVisible(false);
 
     this.restartKey = this.input.keyboard.addKey("R");
+    this.titleKey = this.input.keyboard.addKey("T");
 
     // Listen to GameScene events
     this.game.events.on("ui:notify", (payload) => this._enqueue(payload), this);
@@ -131,13 +132,22 @@ class UIScene extends Phaser.Scene {
   update() {
     // Restart
     if (Phaser.Input.Keyboard.JustDown(this.restartKey) && this.gameOverBg.visible) {
-      // Hide game over UI and restart game scene
+      this.registry.set("runEnded", false);
       this.gameOverBg.setVisible(false);
       this.gameOverText.setVisible(false);
       this.restartHint.setVisible(false);
 
-      this.scene.get("GameScene").scene.restart();
+      const mode = this.registry.get("gameMode") || "normal";
+      this.scene.get("GameScene").scene.restart({ mode });
       this._enqueue({ text: "New run started. Good luck, water bear!", kind: "note" });
+      return;
+    }
+    if (Phaser.Input.Keyboard.JustDown(this.titleKey) && this.gameOverBg.visible) {
+      this.registry.set("runEnded", false);
+      this.scene.stop("GameScene");
+      this.scene.stop("CodexScene");
+      this.scene.start("TitleScene");
+      this.scene.stop();
       return;
     }
 
@@ -158,13 +168,19 @@ class UIScene extends Phaser.Scene {
     const extinctionCountdown = this.registry.get("extinctionCountdownMs") || 0;
     const freezeActive = !!this.registry.get("freezeActive");
 
-    const remaining = this.registry.get("timeRemainingMs") || 0;
-    const mm = String(Math.floor(remaining / 60000)).padStart(2, "0");
-    const ss = String(Math.floor((remaining % 60000) / 1000)).padStart(2, "0");
+    const mode = this.registry.get("gameMode") || "normal";
+    let timeLabel = "Time left:";
+    let timeMs = this.registry.get("timeRemainingMs") || 0;
+    if (mode !== "normal") {
+      timeLabel = "Time:";
+      timeMs = this.registry.get("timeElapsedMs") || 0;
+    }
+    const mm = String(Math.floor(timeMs / 60000)).padStart(2, "0");
+    const ss = String(Math.floor((timeMs % 60000) / 1000)).padStart(2, "0");
 
     this.bars.setText(
       `HP: ${hp}/${hpMax}   Hunger: ${hunger}/${hungerMax}   XP: ${xp}   Lvl: ${lvl}\n` +
-      `Offspring: ${offspring}   Next egg at XP: ${threshold}   Time left: ${mm}:${ss}`
+      `Offspring: ${offspring}   Next egg at XP: ${threshold}   ${timeLabel} ${mm}:${ss}`
     );
 
     if (freezeActive) {

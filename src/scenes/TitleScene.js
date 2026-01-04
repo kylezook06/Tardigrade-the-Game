@@ -14,12 +14,19 @@ class TitleScene extends Phaser.Scene {
     const panel = this.add.rectangle(w / 2, h / 2, 720, 520, 0x000000, 0.85);
     panel.setStrokeStyle(2, 0xffffff, 0.18);
 
-    this.add.text(w / 2, h / 2 - 210, "Tardigrade: The Game", {
-      fontFamily: "Arial",
-      fontSize: "38px",
-      color: "#ffffff",
-      fontStyle: "bold"
-    }).setOrigin(0.5);
+    if (this.textures.exists("ui_logo")) {
+      const logo = this.add.image(w / 2, h / 2 - 180, "ui_logo");
+      const maxW = 300;
+      const maxH = 90;
+      const s = Math.min(maxW / logo.width, maxH / logo.height);
+      logo.setScale(s);
+    } else {
+      this.add.text(w / 2, h / 2 - 180, "Tardigrade: The Game", {
+        fontFamily: "Arial",
+        fontSize: "46px",
+        color: "#ffffff"
+      }).setOrigin(0.5);
+    }
 
     this.add.text(w / 2, h / 2 - 160, "Choose a mode", {
       fontFamily: "Arial",
