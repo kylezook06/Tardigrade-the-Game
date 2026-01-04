@@ -11,7 +11,7 @@ class TitleScene extends Phaser.Scene {
 
     this.add.rectangle(w / 2, h / 2, w, h, 0x000000, 0.55);
 
-    const panel = this.add.rectangle(w / 2, h / 2, 720, 520, 0x000000, 0.85);
+    const panel = this.add.rectangle(w / 2, h / 2, 720, 560, 0x000000, 0.85);
     panel.setStrokeStyle(2, 0xffffff, 0.18);
 
     let headerBottomY = (h / 2) - 180;
@@ -61,8 +61,8 @@ class TitleScene extends Phaser.Scene {
       }
     ];
 
-    const startY = headerBottomY + 96;
-    const lineH = 120;
+    const startY = headerBottomY + 66;
+    const lineH = 128;
 
     options.forEach((o, i) => {
       const y = startY + i * lineH;
@@ -88,7 +88,7 @@ class TitleScene extends Phaser.Scene {
       box.on("pointerdown", () => this._startMode(o.mode));
     });
 
-    this.add.text(w / 2, h / 2 + 228, "Tip: C opens Codex • M cycles music • SPACE enters Tun", {
+    this.add.text(w / 2, h / 2 + 260, "Tip: C opens Codex • M cycles music • SPACE enters Tun", {
       fontFamily: "Arial",
       fontSize: "14px",
       color: "#ffffff",

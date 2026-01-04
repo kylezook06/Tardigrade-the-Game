@@ -1284,6 +1284,7 @@ class GameScene extends Phaser.Scene {
       this.extinction.started = true;
       this.extinction.endAtMs = time + Math.max(4000, (this.tun.durationMs - 800));
       this.registry.set("freezeActive", true);
+      this.registry.set("extinctionCountdownMs", 0);
       this.cameras.main.flash(250, 255, 255, 255);
 
       if (this.hazards) this.hazards.clear(true, true);
@@ -1304,6 +1305,7 @@ class GameScene extends Phaser.Scene {
       } else {
         this.extinction.ended = true;
         this.registry.set("freezeActive", false);
+        this.registry.set("extinctionCountdownMs", 0);
 
         if (this.hazardTimer) this.hazardTimer.paused = false;
 
