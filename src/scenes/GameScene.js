@@ -110,6 +110,22 @@ class GameScene extends Phaser.Scene {
     this.game.events.emit("ui:notify", { text: "Tip: Press M to cycle background music (includes OFF).", kind: "note" });
     this.recentFacts = [];
     this.maxRecentFacts = 4;
+    this.maxHazards = 26;
+    // --- Mass Extinction Event (freeze) ---
+    this.extinction = {
+      warned: false,
+      started: false,
+      ended: false,
+      startAtMs: this.runStart + (10 * 60 * 1000),
+      warnAtMs: this.runStart + (9.5 * 60 * 1000),
+      endAtMs: 0,
+      dps: 14
+    };
+    this.postEventPredatorSpawns = {
+      done12: false,
+      done14: false,
+      done16: false
+    };
 
     // --- Audio ---
     this.sfxEat = this.sound.add("sfx_eat", { volume: 0.6 });
@@ -187,6 +203,7 @@ class GameScene extends Phaser.Scene {
     }
 
     this._resolveBiome();
+    this._updateExtinctionEvent(time, delta);
     this._updateTun(time);
     this._updatePredator(time, dt);
     this._updateNeeds(dt);
@@ -311,7 +328,7 @@ class GameScene extends Phaser.Scene {
   }
 
   _spawnHazard() {
-    const maxHazards = 26;
+    const maxHazards = this.maxHazards || 26;
     if (this.hazards.getLength() >= maxHazards) return;
     const kinds = [
       { key: "haz_nematode", name: "Nematode", speed: 120, dmg: 10 },
@@ -543,7 +560,12 @@ class GameScene extends Phaser.Scene {
     tiles.setMask(geomMask);
     edgeFade.setMask(geomMask);
 
-    const rim = this._drawFeatherRim(x, y, w, h, seed, 0.08, 20, 12, 4);
+    const rim = this._drawFeatherRim(
+      x, y, w, h, seed,
+      0.06,
+      20, 12, 4,
+      Phaser.BlendModes.NORMAL
+    );
 
     this._biomeVisuals.push(maskGfx);
     this._biomeVisuals.push(rim);
@@ -595,7 +617,12 @@ class GameScene extends Phaser.Scene {
     const geomMask = maskGfx.createGeometryMask();
     tile.setMask(geomMask);
 
-    const rim = this._drawFeatherRim(x, y, w, h, seed, 0.18, 12, 8, 2);
+    const rim = this._drawFeatherRim(
+      x, y, w, h, seed,
+      0.14,
+      12, 8, 2,
+      Phaser.BlendModes.MULTIPLY
+    );
 
     this._biomeVisuals.push(tile, maskGfx, rim);
 
@@ -618,15 +645,16 @@ class GameScene extends Phaser.Scene {
       this.physics.add.existing(node, true);
       node.body.setCircle(r);
       node.body.updateFromGameObject();
+      node.setData("r", r);
 
       this.soilWalls.add(node);
     }
   }
 
-  _drawFeatherRim(x, y, w, h, seed, baseAlpha, expandStart, expandStep, rings) {
+  _drawFeatherRim(x, y, w, h, seed, baseAlpha, expandStart, expandStep, rings, blendMode) {
     const g = this.add.graphics();
     g.setDepth(0);
-    g.setBlendMode(Phaser.BlendModes.MULTIPLY);
+    g.setBlendMode(blendMode || Phaser.BlendModes.NORMAL);
 
     const points = 32;
     const rx0 = (w * 0.5) * 0.98;
@@ -825,10 +853,25 @@ class GameScene extends Phaser.Scene {
     for (let i = 0; i < 30; i++) {
       const x = Phaser.Math.Between(40, this.worldW - 40);
       const y = Phaser.Math.Between(40, this.worldH - 40);
-      if (Phaser.Math.Distance.Between(px, py, x, y) >= minDist) return { x, y };
+      if (Phaser.Math.Distance.Between(px, py, x, y) < minDist) continue;
+      if (this._isPointInSoil && this._isPointInSoil(x, y, 40)) continue;
+      return { x, y };
     }
     // fallback
     return { x: Phaser.Math.Between(40, this.worldW - 40), y: Phaser.Math.Between(40, this.worldH - 40) };
+  }
+
+  _isPointInSoil(x, y, pad) {
+    if (!this.soilWalls) return false;
+    const nodes = this.soilWalls.getChildren();
+    for (let i = 0; i < nodes.length; i++) {
+      const n = nodes[i];
+      if (!n) continue;
+      const r = (n.getData && n.getData("r")) ? n.getData("r") : 32;
+      const d = Phaser.Math.Distance.Between(x, y, n.x, n.y);
+      if (d <= r + pad) return true;
+    }
+    return false;
   }
 
   // -----------------------------
@@ -978,7 +1021,7 @@ class GameScene extends Phaser.Scene {
     this.registry.set("hpMax", 100);
     this.registry.set("hp", 100);
 
-    this.registry.set("hungerMax", 235);
+    this.registry.set("hungerMax", 100);
     this.registry.set("hunger", 100);
 
     this.registry.set("xp", 0);
@@ -1098,6 +1141,7 @@ class GameScene extends Phaser.Scene {
     predator.setData("nextWanderAt", 0);
 
     this.physics.add.overlap(this.player, predator, this._onHitPredator, null, this);
+    this.physics.add.overlap(predator, this.food, this._onPredatorEatFood, null, this);
     this.physics.add.collider(predator, this.soilWalls);
 
     if (!this.predatorWarned) {
@@ -1131,6 +1175,23 @@ class GameScene extends Phaser.Scene {
           .scale(this.predatorSpeed);
         predator.setVelocity(v.x, v.y);
       } else {
+        if (Math.random() < 0.25 && this.food && this.food.getLength() > 0) {
+          let closest = null;
+          let bestD = 999999;
+
+          this.food.children.iterate((f) => {
+            if (!f) return;
+            const d = Phaser.Math.Distance.Between(ex, ey, f.x, f.y);
+            if (d < bestD) { bestD = d; closest = f; }
+          });
+
+          if (closest && bestD < 420) {
+            const ang = Math.atan2(closest.y - ey, closest.x - ex);
+            predator.setData("wanderAng", ang);
+            predator.setData("nextWanderAt", time + Phaser.Math.Between(700, 1200));
+          }
+        }
+
         let nextWanderAt = predator.getData("nextWanderAt") || 0;
         let wanderAng = predator.getData("wanderAng") || 0;
         if (time >= nextWanderAt) {
@@ -1152,6 +1213,75 @@ class GameScene extends Phaser.Scene {
         predator.setFlipX(predator.body.velocity.x < 0);
       }
     });
+  }
+
+  _updateExtinctionEvent(time, delta) {
+    if (!this.extinction) return;
+
+    if (!this.extinction.warned && time >= this.extinction.warnAtMs) {
+      this.extinction.warned = true;
+      this._emitNote("⚠️ Freeze front approaching! Enter Tun Mode (SPACE) to survive.");
+      this._emitFact("Environmental shocks (freezing/drying) can wipe out many microfauna—tardigrades cheat death via cryptobiosis.");
+    }
+
+    if (!this.extinction.started && time >= this.extinction.startAtMs) {
+      this.extinction.started = true;
+      this.extinction.endAtMs = time + Math.max(1500, (this.tun.durationMs - 500));
+
+      if (this.hazards) this.hazards.clear(true, true);
+      if (this.hazardTimer) this.hazardTimer.paused = true;
+
+      this._emitNote("❄️ Mass extinction event! Freeze conditions sweep the habitat.");
+      this.game.events.emit("ui:notify", { text: "Stay in Tun until it passes…", kind: "note" });
+    }
+
+    if (this.extinction.started && !this.extinction.ended) {
+      if (time < this.extinction.endAtMs) {
+        if (!(this.tun && this.tun.active)) {
+          const dt = delta / 1000;
+          let hp = this.registry.get("hp");
+          hp = Phaser.Math.Clamp(hp - (this.extinction.dps * dt), 0, this.registry.get("hpMax"));
+          this.registry.set("hp", hp);
+        }
+      } else {
+        this.extinction.ended = true;
+
+        if (this.hazardTimer) this.hazardTimer.paused = false;
+
+        this.maxPredators = Math.min(9, this.maxPredators * 2);
+        this.maxHazards = Math.min(70, (this.maxHazards || 26) * 2);
+
+        this._emitNote("🌡️ Freeze passes. The ecosystem rebounds… violently.");
+        this._emitFact("Boom-bust cycles can happen in microhabitats as conditions shift and survivors repopulate.");
+      }
+    }
+
+    if (this.extinction.ended) {
+      const elapsedMin = (time - this.runStart) / 60000;
+
+      if (elapsedMin >= 12 && !this.postEventPredatorSpawns.done12) {
+        this.postEventPredatorSpawns.done12 = true;
+        this._spawnPredatorBurst(3);
+        this._emitNote("Predators return to the hunt (12:00).");
+      }
+      if (elapsedMin >= 14 && !this.postEventPredatorSpawns.done14) {
+        this.postEventPredatorSpawns.done14 = true;
+        this._spawnPredatorBurst(3);
+        this._emitNote("More predators emerge (14:00).");
+      }
+      if (elapsedMin >= 16 && !this.postEventPredatorSpawns.done16) {
+        this.postEventPredatorSpawns.done16 = true;
+        this._spawnPredatorBurst(3);
+        this._emitNote("Final wave of predators (16:00).");
+      }
+    }
+  }
+
+  _spawnPredatorBurst(count) {
+    for (let i = 0; i < count; i++) {
+      if (this.predators.getLength() >= this.maxPredators) return;
+      this._spawnPredator();
+    }
   }
 
   _predatorCanSeePlayer(ex, ey, px, py, dist, facing) {
@@ -1231,6 +1361,14 @@ class GameScene extends Phaser.Scene {
     player.setVelocity(v.x, v.y);
 
     if (hp <= 0) this._endRun("You were eaten.");
+  }
+
+  _onPredatorEatFood(predator, food) {
+    if (!predator || !food) return;
+    food.destroy();
+    if (Math.random() < 0.15) {
+      this._emitFact("Carnivorous tardigrades will still graze on biofilm when prey isn’t available.");
+    }
   }
 
   _applyCodexPause(shouldPause) {
