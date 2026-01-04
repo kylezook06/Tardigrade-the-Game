@@ -208,14 +208,10 @@ class UIScene extends Phaser.Scene {
     } else {
       this.freezeTint.setVisible(false);
       this.freezeVignette.setVisible(false);
-      if (this.iceCracks.visible) {
+      if (this.iceCracks.visible || this.iceCracks.alpha > 0) {
         this.tweens.killTweensOf(this.iceCracks);
-        this.tweens.add({
-          targets: this.iceCracks,
-          alpha: 0,
-          duration: 250,
-          onComplete: () => this.iceCracks.setVisible(false)
-        });
+        this.iceCracks.setAlpha(0);
+        this.iceCracks.setVisible(false);
       }
     }
 
