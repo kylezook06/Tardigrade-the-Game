@@ -51,6 +51,35 @@ class UIScene extends Phaser.Scene {
     this.popupBg.setVisible(false);
     this.popupText.setVisible(false);
 
+    // Freeze warning overlay
+    this.freezeWarnBg = this.add.rectangle(0, 0, 640, 120, 0x000000, 0.55)
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(1200)
+      .setVisible(false);
+
+    this.freezeWarnText = this.add.text(0, 0, "", {
+      fontFamily: "Arial",
+      fontSize: "32px",
+      color: "#ffffff",
+      align: "center"
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(1201).setVisible(false);
+
+    this._freezeWarnPulsing = false;
+
+    // Freeze active overlay (cold tint + vignette)
+    this.freezeTint = this.add.rectangle(0, 0, 10, 10, 0x9fd6ff, 0.0)
+      .setOrigin(0)
+      .setScrollFactor(0)
+      .setDepth(1100)
+      .setVisible(false);
+
+    this.freezeVignette = this.add.rectangle(0, 0, 10, 10, 0x000000, 0.0)
+      .setOrigin(0)
+      .setScrollFactor(0)
+      .setDepth(1101)
+      .setVisible(false);
+
     // Game over panel
     this.gameOverBg = this.add.rectangle(640, 360, 820, 420, 0x000000, 0.72)
       .setScrollFactor(0).setDepth(2000).setVisible(false);
@@ -81,6 +110,13 @@ class UIScene extends Phaser.Scene {
     this.game.events.on("ui:codexUnlock", () => {
       this._enqueue({ text: "Codex updated (press C)", kind: "note" });
     });
+
+    this._layoutFreezeWarning();
+    this._layoutFreezeFx();
+    this.scale.on("resize", () => {
+      this._layoutFreezeWarning();
+      this._layoutFreezeFx();
+    });
   }
 
   update() {
@@ -110,6 +146,8 @@ class UIScene extends Phaser.Scene {
     const tunActive = this.registry.get("tunActive");
     const tunReadyIn = this.registry.get("tunReadyInMs") || 0;
     const tunEndsIn = this.registry.get("tunEndsInMs") || 0;
+    const extinctionCountdown = this.registry.get("extinctionCountdownMs") || 0;
+    const freezeActive = !!this.registry.get("freezeActive");
 
     const remaining = this.registry.get("timeRemainingMs") || 0;
     const extinctionCountdown = this.registry.get("extinctionCountdownMs") || 0;
@@ -121,15 +159,49 @@ class UIScene extends Phaser.Scene {
       `Offspring: ${offspring}   Next egg at XP: ${threshold}   Time left: ${mm}:${ss}`
     );
 
+    if (freezeActive) {
+      this.freezeTint.setVisible(true);
+      this.freezeVignette.setVisible(true);
+      this.freezeTint.setFillStyle(0x9fd6ff, 0.18);
+      this.freezeVignette.setFillStyle(0x000000, 0.10);
+    } else {
+      this.freezeTint.setVisible(false);
+      this.freezeVignette.setVisible(false);
+    }
+
     if (extinctionCountdown > 0) {
       const sec = Math.ceil(extinctionCountdown / 1000);
       this.tunText.setText(`Freeze in: ${sec}s — enter Tun [SPACE]`);
+
+      this.freezeWarnBg.setVisible(true);
+      this.freezeWarnText.setVisible(true);
+      this.freezeWarnText.setText(`❄ FREEZE IN ${sec}s\nENTER TUN [SPACE]`);
+
+      if (!this._freezeWarnPulsing) {
+        this._freezeWarnPulsing = true;
+        this.tweens.add({
+          targets: [this.freezeWarnBg, this.freezeWarnText],
+          alpha: { from: 0.35, to: 1 },
+          duration: 380,
+          yoyo: true,
+          repeat: 4
+        });
+      }
     } else if (tunActive) {
       this.tunText.setText(`Tun: ACTIVE (${Math.ceil(tunEndsIn / 1000)}s) [SPACE]`);
+      this.freezeWarnBg.setVisible(false);
+      this.freezeWarnText.setVisible(false);
+      this._freezeWarnPulsing = false;
     } else if (tunReadyIn > 0) {
       this.tunText.setText(`Tun: Cooldown (${Math.ceil(tunReadyIn / 1000)}s) [SPACE]`);
+      this.freezeWarnBg.setVisible(false);
+      this.freezeWarnText.setVisible(false);
+      this._freezeWarnPulsing = false;
     } else {
       this.tunText.setText("Tun: Ready [SPACE]");
+      this.freezeWarnBg.setVisible(false);
+      this.freezeWarnText.setVisible(false);
+      this._freezeWarnPulsing = false;
     }
 
 
@@ -212,6 +284,18 @@ class UIScene extends Phaser.Scene {
     this.showing = false;
     this.popupBg.setVisible(false);
     this.popupText.setVisible(false);
+  }
+
+  _layoutFreezeWarning() {
+    const cx = Math.floor(this.scale.width / 2);
+    const cy = Math.floor(this.scale.height / 2);
+    this.freezeWarnBg.setPosition(cx, cy);
+    this.freezeWarnText.setPosition(cx, cy);
+  }
+
+  _layoutFreezeFx() {
+    this.freezeTint.setSize(this.scale.width, this.scale.height);
+    this.freezeVignette.setSize(this.scale.width, this.scale.height);
   }
 }
 

@@ -36,6 +36,22 @@ class CodexScene extends Phaser.Scene {
       color: "#b7c7dd"
     }).setOrigin(0.5).setScrollFactor(0).setDepth(3001).setVisible(false);
 
+    this.codexScrollY = 0;
+    this.codexViewW = 700;
+    this.codexViewH = 360;
+    this.codexMaskGfx = this.make.graphics({ x: 0, y: 0, add: false });
+    this.codexMask = this.codexMaskGfx.createGeometryMask();
+    this.body.setMask(this.codexMask);
+
+    this.input.on("wheel", (pointer, over, dx, dy) => {
+      if (!this.isOpen) return;
+      const bounds = this.body.getTextBounds();
+      const contentH = bounds.local.height || 0;
+      const maxScroll = Math.max(0, contentH - this.codexViewH);
+      this.codexScrollY = Phaser.Math.Clamp(this.codexScrollY + dy * 0.6, 0, maxScroll);
+      this._applyCodexScroll();
+    });
+
     this._layout();
     this.scale.on("resize", () => this._layout());
   }
@@ -55,8 +71,17 @@ class CodexScene extends Phaser.Scene {
 
     this.bg.setPosition(cx, cy);
     this.title.setPosition(cx, cy - 220);
-    this.body.setPosition(cx, cy - 180);
+    this.codexViewX = cx - (this.codexViewW / 2);
+    this.codexViewY = cy - 180;
+    this.body.setOrigin(0, 0);
+    this.body.setPosition(this.codexViewX, this.codexViewY);
+
+    this.codexMaskGfx.clear();
+    this.codexMaskGfx.fillStyle(0xffffff, 1);
+    this.codexMaskGfx.fillRect(this.codexViewX, this.codexViewY, this.codexViewW, this.codexViewH);
     this.hint.setPosition(cx, cy + 225);
+
+    this._applyCodexScroll();
   }
 
   toggle(forceState) {
@@ -70,7 +95,16 @@ class CodexScene extends Phaser.Scene {
     this.body.setVisible(open);
     this.hint.setVisible(open);
 
-    if (open) this.render();
+    if (open) {
+      this.codexScrollY = 0;
+      this.render();
+      this._applyCodexScroll();
+    }
+  }
+
+  _applyCodexScroll() {
+    if (this.codexViewY === undefined) return;
+    this.body.setY(this.codexViewY - (this.codexScrollY || 0));
   }
 
   render() {

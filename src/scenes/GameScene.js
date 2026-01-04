@@ -203,11 +203,8 @@ class GameScene extends Phaser.Scene {
     }
 
     this._resolveBiome();
+    this._updateExtinctionCountdown(time);
     this._updateExtinctionEvent(time, delta);
-    if (this.extinction && !this.extinction.started) {
-      const msLeft = this.extinction.startAtMs - time;
-      this.registry.set("extinctionCountdownMs", (msLeft <= 15000 && msLeft > 0) ? msLeft : 0);
-    }
     this._updateTun(time);
     this._updatePredator(time, dt);
     this._updateNeeds(dt);
@@ -1055,6 +1052,8 @@ class GameScene extends Phaser.Scene {
     this.registry.set("tunReadyInMs", 0);
     this.registry.set("tunEndsInMs", 0);
     this.registry.set("codexOpen", false);
+    this.registry.set("freezeActive", false);
+    this.registry.set("extinctionCountdownMs", 0);
     this._codexPaused = false;
   }
 
@@ -1229,6 +1228,26 @@ class GameScene extends Phaser.Scene {
     });
   }
 
+  _updateExtinctionCountdown(nowMs) {
+    if (!this.extinction) {
+      this.registry.set("extinctionCountdownMs", 0);
+      return;
+    }
+
+    const tToStart = this.extinction.startAtMs - nowMs;
+
+    if (this.extinction.started || this.extinction.ended) {
+      this.registry.set("extinctionCountdownMs", 0);
+      return;
+    }
+
+    if (tToStart > 0 && tToStart <= 15000) {
+      this.registry.set("extinctionCountdownMs", tToStart);
+    } else {
+      this.registry.set("extinctionCountdownMs", 0);
+    }
+  }
+
   _updateExtinctionEvent(time, delta) {
     if (!this.extinction) return;
 
@@ -1241,6 +1260,7 @@ class GameScene extends Phaser.Scene {
     if (!this.extinction.started && time >= this.extinction.startAtMs) {
       this.extinction.started = true;
       this.extinction.endAtMs = time + Math.max(4000, (this.tun.durationMs - 800));
+      this.registry.set("freezeActive", true);
       this.cameras.main.flash(250, 255, 255, 255);
 
       if (this.hazards) this.hazards.clear(true, true);
@@ -1260,6 +1280,7 @@ class GameScene extends Phaser.Scene {
         }
       } else {
         this.extinction.ended = true;
+        this.registry.set("freezeActive", false);
 
         if (this.hazardTimer) this.hazardTimer.paused = false;
 
