@@ -6,6 +6,10 @@
     parent: "game",
     width: 1280,
     height: 720,
+    scale: {
+      mode: Phaser.Scale.FIT,
+      autoCenter: Phaser.Scale.CENTER_BOTH
+    },
     backgroundColor: "#0b1020",
     physics: {
       default: "arcade",
