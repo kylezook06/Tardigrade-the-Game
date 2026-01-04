@@ -264,6 +264,10 @@ class GameScene extends Phaser.Scene {
     if (usingKeyboard) {
       const v = new Phaser.Math.Vector2(vx, vy).normalize().scale(speed);
       this.player.setVelocity(v.x, v.y);
+      const angle = Math.atan2(v.y, v.x);
+      const step = Math.PI / 4;
+      const snapped = Math.round(angle / step) * step;
+      this.player.setRotation(snapped);
     } else if (this.pointerMoveTarget) {
       // Click-to-move steering
       const to = new Phaser.Math.Vector2(
@@ -278,6 +282,10 @@ class GameScene extends Phaser.Scene {
       } else {
         to.normalize();
         this.player.setVelocity(to.x * speed, to.y * speed);
+        const angle = Math.atan2(to.y, to.x);
+        const step = Math.PI / 4;
+        const snapped = Math.round(angle / step) * step;
+        this.player.setRotation(snapped);
       }
     } else {
       this.player.setVelocity(0, 0);
@@ -715,21 +723,15 @@ class GameScene extends Phaser.Scene {
     if (!sprite || sprite.getData("tweened")) return;
     sprite.setData("tweened", true);
 
+    this.tweens.killTweensOf(sprite);
     const phase = Phaser.Math.Between(0, 200);
 
     this.tweens.add({
       targets: sprite,
-      y: sprite.y - 3,
+      scale: { from: 1.0, to: 1.08 },
+      alpha: { from: 1.0, to: 0.90 },
+      angle: { from: -2, to: 2 },
       duration: 900 + phase,
-      yoyo: true,
-      repeat: -1,
-      ease: "Sine.easeInOut"
-    });
-
-    this.tweens.add({
-      targets: sprite,
-      alpha: { from: 0.92, to: 1.0 },
-      duration: 1100 + phase,
       yoyo: true,
       repeat: -1,
       ease: "Sine.easeInOut"
@@ -1227,6 +1229,7 @@ class GameScene extends Phaser.Scene {
     if (!this.extinction.started && time >= this.extinction.startAtMs) {
       this.extinction.started = true;
       this.extinction.endAtMs = time + Math.max(1500, (this.tun.durationMs - 500));
+      this.cameras.main.flash(250, 255, 255, 255);
 
       if (this.hazards) this.hazards.clear(true, true);
       if (this.hazardTimer) this.hazardTimer.paused = true;
@@ -1300,45 +1303,44 @@ class GameScene extends Phaser.Scene {
   }
 
   _hasLineOfSight(x1, y1, x2, y2) {
-    const walls = this.soilWalls.getChildren();
+    if (!this.soilWalls) return true;
+    const nodes = this.soilWalls.getChildren();
 
-    for (let i = 0; i < walls.length; i++) {
-      const w = walls[i];
-      if (!w || !w.body) continue;
-
-      const left = w.body.x;
-      const top = w.body.y;
-      const right = w.body.x + w.body.width;
-      const bottom = w.body.y + w.body.height;
-
-      if (this._lineIntersectsRect(x1, y1, x2, y2, left, top, right, bottom)) {
+    for (let i = 0; i < nodes.length; i++) {
+      const n = nodes[i];
+      if (!n) continue;
+      const cx = n.x ?? n.body?.x;
+      const cy = n.y ?? n.body?.y;
+      const r = (n.getData && n.getData("r")) ? n.getData("r") : (n.body?.circleRadius || 0);
+      if (r > 0 && this._segmentIntersectsCircle(x1, y1, x2, y2, cx, cy, r)) {
         return false;
       }
     }
     return true;
   }
 
-  _lineIntersectsRect(x1, y1, x2, y2, left, top, right, bottom) {
-    const inside1 = (x1 >= left && x1 <= right && y1 >= top && y1 <= bottom);
-    const inside2 = (x2 >= left && x2 <= right && y2 >= top && y2 <= bottom);
-    if (inside1 || inside2) return true;
+  _segmentIntersectsCircle(x1, y1, x2, y2, cx, cy, r) {
+    const vx = x2 - x1;
+    const vy = y2 - y1;
+    const wx = cx - x1;
+    const wy = cy - y1;
 
-    return (
-      this._lineSegIntersect(x1, y1, x2, y2, left, top, right, top) ||
-      this._lineSegIntersect(x1, y1, x2, y2, right, top, right, bottom) ||
-      this._lineSegIntersect(x1, y1, x2, y2, right, bottom, left, bottom) ||
-      this._lineSegIntersect(x1, y1, x2, y2, left, bottom, left, top)
-    );
-  }
+    const c1 = wx * vx + wy * vy;
+    if (c1 <= 0) return (wx * wx + wy * wy) <= r * r;
 
-  _lineSegIntersect(x1, y1, x2, y2, x3, y3, x4, y4) {
-    const den = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
-    if (den === 0) return false;
+    const c2 = vx * vx + vy * vy;
+    if (c2 <= c1) {
+      const dx = cx - x2;
+      const dy = cy - y2;
+      return (dx * dx + dy * dy) <= r * r;
+    }
 
-    const t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / den;
-    const u = -((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / den;
-
-    return (t >= 0 && t <= 1 && u >= 0 && u <= 1);
+    const b = c1 / c2;
+    const px = x1 + b * vx;
+    const py = y1 + b * vy;
+    const dx = cx - px;
+    const dy = cy - py;
+    return (dx * dx + dy * dy) <= r * r;
   }
 
   _onHitPredator(player, predator) {
@@ -1372,10 +1374,11 @@ class GameScene extends Phaser.Scene {
   }
 
   _applyCodexPause(shouldPause) {
-    if (this._codexPaused === shouldPause) return;
-    this._codexPaused = shouldPause;
-
     if (shouldPause) {
+      if (this._codexPaused) return;
+      this._codexPaused = true;
+      this._pauseStartedAt = this.time.now;
+
       this.player.setVelocity(0, 0);
 
       if (this.predators) {
@@ -1390,12 +1393,31 @@ class GameScene extends Phaser.Scene {
         });
       }
 
-      this.physics.world.pause();
-      this.time.paused = true;
-    } else {
-      this.physics.world.resume();
-      this.time.paused = false;
+      this.physics.world.isPaused = true;
+      this.tweens.pauseAll();
+
+      const timers = [this.foodTimer, this.hazardTimer, this.factTimer, this._hazardWanderTimer];
+      timers.forEach((t) => { if (t) t.paused = true; });
+      return;
     }
+
+    if (!this._codexPaused) return;
+    this._codexPaused = false;
+
+    const pausedMs = this.time.now - (this._pauseStartedAt || this.time.now);
+    this.runStart += pausedMs;
+    if (this.nextPredatorAt) this.nextPredatorAt += pausedMs;
+    if (this.extinction) {
+      this.extinction.warnAtMs += pausedMs;
+      this.extinction.startAtMs += pausedMs;
+      if (this.extinction.endAtMs) this.extinction.endAtMs += pausedMs;
+    }
+
+    this.physics.world.isPaused = false;
+    this.tweens.resumeAll();
+
+    const timers = [this.foodTimer, this.hazardTimer, this.factTimer, this._hazardWanderTimer];
+    timers.forEach((t) => { if (t) t.paused = false; });
   }
 
   _playSfx(key) {
