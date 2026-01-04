@@ -179,18 +179,17 @@ class GameScene extends Phaser.Scene {
     this._applyCodexPause(false);
     const dt = delta / 1000;
 
-    const elapsed = time - this.runStart;
+    const elapsedMs = time - this.runStart;
     while (
       this.predatorScheduleIndex < this.predatorSchedule.length &&
-      elapsed >= this.predatorSchedule[this.predatorScheduleIndex]
+      elapsedMs >= this.predatorSchedule[this.predatorScheduleIndex]
     ) {
       if (this.predators.getLength() < this.maxPredators) this._spawnPredator();
       this.predatorScheduleIndex++;
     }
 
     // End run at 20 minutes
-    const elapsed = time - this.runStart;
-    const remaining = Math.max(0, this.runLengthMs - elapsed);
+    const remaining = Math.max(0, this.runLengthMs - elapsedMs);
     this.registry.set("timeRemainingMs", remaining);
 
     if (remaining <= 0) {
