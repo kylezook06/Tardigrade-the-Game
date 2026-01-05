@@ -107,6 +107,11 @@ class UIScene extends Phaser.Scene {
 
     this.restartKey = this.input.keyboard.addKey("R");
     this.titleKey = this.input.keyboard.addKey("T");
+    this.key1 = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ONE);
+    this.key2 = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.TWO);
+    this.key3 = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.THREE);
+    this.upgradeOpen = false;
+    this.upgradeOptions = [];
 
     // Listen to GameScene events
     this.game.events.on("ui:notify", (payload) => this._enqueue(payload), this);
@@ -118,14 +123,69 @@ class UIScene extends Phaser.Scene {
     this.game.events.on("ui:codexUnlock", () => {
       this._enqueue({ text: "Codex updated (press C)", kind: "note" });
     });
+    this.game.events.on("ui:upgradeChoice", (payload) => this._showUpgradeChoice(payload), this);
+
+    // --- Upgrade Choice Modal ---
+    this.upgradeBg = this.add.rectangle(0, 0, 860, 420, 0x000000, 0.78)
+      .setOrigin(0.5, 0.5).setScrollFactor(0).setDepth(1500).setVisible(false);
+
+    this.upgradeTitle = this.add.text(0, 0, "Choose an upgrade (1 / 2 / 3)", {
+      fontFamily: "Arial",
+      fontSize: "22px",
+      color: "#ffffff"
+    }).setOrigin(0.5, 0.5).setScrollFactor(0).setDepth(1501).setVisible(false);
+
+    this.upgradeCards = [];
+    for (let i = 0; i < 3; i++) {
+      const card = this.add.container(0, 0).setScrollFactor(0).setDepth(1501).setVisible(false);
+
+      const rect = this.add.rectangle(0, 0, 250, 260, 0x0b1a2a, 0.92)
+        .setStrokeStyle(2, 0x2a4d6a, 1);
+
+      const num = this.add.text(-110, -112, String(i + 1), {
+        fontFamily: "Arial",
+        fontSize: "18px",
+        color: "#cfe9ff"
+      });
+
+      const t = this.add.text(0, -82, "Upgrade", {
+        fontFamily: "Arial",
+        fontSize: "20px",
+        color: "#ffffff",
+        align: "center",
+        wordWrap: { width: 220 }
+      }).setOrigin(0.5, 0);
+
+      const d = this.add.text(0, -30, "Description", {
+        fontFamily: "Arial",
+        fontSize: "15px",
+        color: "#d7e7ff",
+        align: "center",
+        wordWrap: { width: 220 }
+      }).setOrigin(0.5, 0);
+
+      rect.setInteractive({ useHandCursor: true });
+      rect.on("pointerdown", () => this._pickUpgrade(i));
+      rect.on("pointerover", () => rect.setStrokeStyle(2, 0x6fb6ff, 1));
+      rect.on("pointerout", () => rect.setStrokeStyle(2, 0x2a4d6a, 1));
+
+      card.add([rect, num, t, d]);
+      card._rect = rect;
+      card._title = t;
+      card._desc = d;
+
+      this.upgradeCards.push(card);
+    }
 
     this._layoutFreezeWarning();
     this._layoutFreezeFx();
     this._layoutCracks();
+    this._layoutUpgradeModal();
     this.scale.on("resize", () => {
       this._layoutFreezeWarning();
       this._layoutFreezeFx();
       this._layoutCracks();
+      this._layoutUpgradeModal();
     });
   }
 
@@ -148,6 +208,13 @@ class UIScene extends Phaser.Scene {
       this.scene.stop("CodexScene");
       this.scene.start("TitleScene");
       this.scene.stop();
+      return;
+    }
+
+    if (this.upgradeOpen) {
+      if (Phaser.Input.Keyboard.JustDown(this.key1)) this._pickUpgrade(0);
+      else if (Phaser.Input.Keyboard.JustDown(this.key2)) this._pickUpgrade(1);
+      else if (Phaser.Input.Keyboard.JustDown(this.key3)) this._pickUpgrade(2);
       return;
     }
 
@@ -348,6 +415,68 @@ class UIScene extends Phaser.Scene {
     const sx = this.scale.width / this.iceCracks.width;
     const sy = this.scale.height / this.iceCracks.height;
     this.iceCracks.setScale(sx, sy);
+  }
+
+  _layoutUpgradeModal() {
+    const cx = Math.floor(this.scale.width / 2);
+    const cy = Math.floor(this.scale.height / 2);
+    this.upgradeBg.setPosition(cx, cy);
+    this.upgradeTitle.setPosition(cx, cy - 170);
+
+    const spacing = 290;
+    if (this.upgradeCards && this.upgradeCards.length === 3) {
+      this.upgradeCards[0].setPosition(cx - spacing, cy + 20);
+      this.upgradeCards[1].setPosition(cx, cy + 20);
+      this.upgradeCards[2].setPosition(cx + spacing, cy + 20);
+    }
+  }
+
+  _showUpgradeChoice({ options }) {
+    if (!options || options.length !== 3) return;
+
+    this.upgradeOpen = true;
+    this.registry.set("upgradeOpen", true);
+    this.upgradeOptions = options;
+
+    this.upgradeBg.setVisible(true);
+    this.upgradeTitle.setVisible(true);
+
+    for (let i = 0; i < 3; i++) {
+      const opt = options[i];
+      const card = this.upgradeCards[i];
+      card._title.setText(opt.title);
+      card._desc.setText(opt.desc);
+      card.setVisible(true);
+    }
+
+    this.queue.length = 0;
+    this.showing = false;
+    this.popupBg.setVisible(false);
+    this.popupText.setVisible(false);
+  }
+
+  _hideUpgradeChoice() {
+    this.upgradeOpen = false;
+    this.registry.set("upgradeOpen", false);
+    this.upgradeOptions = [];
+
+    this.upgradeBg.setVisible(false);
+    this.upgradeTitle.setVisible(false);
+    for (const c of this.upgradeCards) c.setVisible(false);
+  }
+
+  _pickUpgrade(index) {
+    if (!this.upgradeOpen) return;
+    const opt = this.upgradeOptions[index];
+    if (!opt) return;
+
+    const gs = this.scene.get("GameScene");
+    if (gs && gs.applyUpgradeById) {
+      gs.applyUpgradeById(opt.id);
+    }
+
+    this._hideUpgradeChoice();
+    if (gs) gs.scene.resume();
   }
 }
 

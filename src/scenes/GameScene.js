@@ -194,6 +194,8 @@ class GameScene extends Phaser.Scene {
   update(time, delta) {
     if (this.registry.get("runEnded")) return;
     if (this.registry.get("codexOpen")) return;
+    if (this.registry.get("upgradeOpen")) return;
+    if (this.registry.get("upgradeOpen")) return;
     const dt = delta / 1000;
 
     const elapsedMs = time - this.runStart;
@@ -945,15 +947,21 @@ class GameScene extends Phaser.Scene {
 
     if (Math.random() < 0.45) this._emitRandomFact();
 
-    // Upgrade pacing: every 80 XP
+    // Upgrade pacing: choice every 5 levels
     const level = this.registry.get("level");
-    const nextLevelXP = this.registry.get("nextLevelXp") || this._xpForNextLevel(level);
-    if (xp >= nextLevelXP) {
-      const nextLevel = level + 1;
+    let nextLevelXP = this.registry.get("nextLevelXp") || this._xpForNextLevel(level);
+
+    while (xp >= nextLevelXP) {
+      const nextLevel = this.registry.get("level") + 1;
       this.registry.set("level", nextLevel);
-      this.registry.set("nextLevelXp", this._xpForNextLevel(nextLevel));
+      nextLevelXP = this._xpForNextLevel(nextLevel);
+      this.registry.set("nextLevelXp", nextLevelXP);
       this._emitNote(`Level up! (${nextLevel})`);
-      this._applyAutoUpgrade();
+
+      if (nextLevel % 5 === 0) {
+        this._openUpgradeChoice();
+        break;
+      }
     }
 
     // Reproduction check
@@ -1078,6 +1086,8 @@ class GameScene extends Phaser.Scene {
     this.registry.set("codexOpen", false);
     this.registry.set("freezeActive", false);
     this.registry.set("extinctionCountdownMs", 0);
+    this.registry.set("upgradeOpen", false);
+    this.registry.set("upgradeHistory", []);
   }
 
   _initCodexIfNeeded() {
@@ -1125,6 +1135,108 @@ class GameScene extends Phaser.Scene {
     ];
 
     Phaser.Utils.Array.GetRandom(options)();
+    this._emitRandomFact();
+  }
+
+  _openUpgradeChoice() {
+    if (this.registry.get("upgradeOpen")) return;
+    const options = this._rollUpgradeOptions(3);
+    this.registry.set("upgradeOpen", true);
+    this.game.events.emit("ui:upgradeChoice", { options });
+    this.scene.pause();
+  }
+
+  _rollUpgradeOptions(count) {
+    const defs = [
+      {
+        id: "belly",
+        title: "Bigger Belly",
+        desc: "+15 max hunger (more buffer between meals).",
+        canShow: () => true
+      },
+      {
+        id: "speed",
+        title: "Faster Feet",
+        desc: "+18 move speed.",
+        canShow: () => true
+      },
+      {
+        id: "resist",
+        title: "Tougher Cuticle",
+        desc: "+6 resistance (reduces damage), up to 45.",
+        canShow: () => (this.registry.get("resist") || 0) < 45
+      },
+      {
+        id: "magnet",
+        title: "Sticky Vibes",
+        desc: "+40 food magnet radius, up to 220.",
+        canShow: () => (this.registry.get("magnet") || 0) < 220
+      }
+    ];
+
+    const history = this.registry.get("upgradeHistory") || [];
+    const lastPick = history.length ? history[history.length - 1] : null;
+
+    let pool = defs.filter((d) => d.canShow());
+    if (pool.length >= count + 1 && lastPick) {
+      pool = pool.filter((d) => d.id !== lastPick);
+    }
+
+    const magnetVal = this.registry.get("magnet") || 0;
+    const picks = [];
+
+    if (magnetVal === 0) {
+      const mag = pool.find((d) => d.id === "magnet") || defs.find((d) => d.id === "magnet");
+      if (mag) {
+        picks.push(mag);
+        pool = pool.filter((d) => d.id !== "magnet");
+      }
+    }
+
+    Phaser.Utils.Array.Shuffle(pool);
+    while (picks.length < count && pool.length) {
+      picks.push(pool.shift());
+    }
+
+    while (picks.length < count) {
+      picks.push(defs[0]);
+    }
+
+    return picks.map((p) => ({ id: p.id, title: p.title, desc: p.desc }));
+  }
+
+  applyUpgradeById(id) {
+    const defs = {
+      belly: () => {
+        const m = this.registry.get("hungerMax") + 15;
+        this.registry.set("hungerMax", m);
+        this.registry.set("hunger", Phaser.Math.Clamp(this.registry.get("hunger") + 15, 0, m));
+        this._emitNote("Upgrade: Bigger belly (+Max Hunger).");
+      },
+      speed: () => {
+        const s = this.registry.get("speed") + 18;
+        this.registry.set("speed", s);
+        this._emitNote("Upgrade: Faster feet (+Move Speed).");
+      },
+      resist: () => {
+        const r = Math.min(45, (this.registry.get("resist") || 0) + 6);
+        this.registry.set("resist", r);
+        this._emitNote("Upgrade: Tougher cuticle (+Resistance).");
+      },
+      magnet: () => {
+        const m = Math.min(220, (this.registry.get("magnet") || 0) + 40);
+        this.registry.set("magnet", m);
+        this._emitNote("Upgrade: Sticky vibes (+Food Magnet).");
+      }
+    };
+
+    if (defs[id]) defs[id]();
+
+    const history = this.registry.get("upgradeHistory") || [];
+    history.push(id);
+    this.registry.set("upgradeHistory", history.slice(-12));
+
+    this.registry.set("upgradeOpen", false);
     this._emitRandomFact();
   }
 
