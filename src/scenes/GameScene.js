@@ -452,38 +452,72 @@ class GameScene extends Phaser.Scene {
 
     this._placedRects = [];
 
-    for (let i = 0; i < soilCount; i++) {
-      const w = Phaser.Math.Between(soilSize.wMin, soilSize.wMax);
-      const h = Phaser.Math.Between(soilSize.hMin, soilSize.hMax);
+    const placeBiome = (type, count, size, minBetween, addFn) => {
+      let placed = 0;
+      for (let i = 0; i < count; i++) {
+        const w = Phaser.Math.Between(size.wMin, size.wMax);
+        const h = Phaser.Math.Between(size.hMin, size.hMax);
 
-      const pos = this._findPlacement(w, h, pad, minFromPlayer, minBetweenSoil, 40);
-      if (!pos) continue;
+        const pos = this._findPlacement(w, h, pad, minFromPlayer, minBetween, 40);
+        if (!pos) continue;
 
-      this._placedRects.push({ x: pos.x, y: pos.y, w, h, type: "soil" });
-      this._addSoilObstacle(pos.x, pos.y, w, h);
-    }
+        this._placedRects.push({ x: pos.x, y: pos.y, w, h, type });
+        addFn(pos.x, pos.y, w, h);
+        placed++;
+      }
 
-    for (let i = 0; i < mossCount; i++) {
-      const w = Phaser.Math.Between(mossSize.wMin, mossSize.wMax);
-      const h = Phaser.Math.Between(mossSize.hMin, mossSize.hMax);
+      if (placed > 0) return placed;
 
-      const pos = this._findPlacement(w, h, pad, minFromPlayer, minBetweenPatches, 40);
-      if (!pos) continue;
+      const fallbackPad = 80;
+      const fallbackMinFromPlayer = Math.min(340, minFromPlayer);
+      const fallbackMinBetween = Math.min(160, minBetween);
+      for (let attempt = 0; attempt < 6; attempt++) {
+        const w = Phaser.Math.Between(size.wMin, size.wMax);
+        const h = Phaser.Math.Between(size.hMin, size.hMax);
+        const pos = this._findPlacement(w, h, fallbackPad, fallbackMinFromPlayer, fallbackMinBetween, 120);
+        if (!pos) continue;
 
-      this._placedRects.push({ x: pos.x, y: pos.y, w, h, type: "moss" });
-      this._addBiomePatch(pos.x, pos.y, w, h, "moss");
-    }
+        this._placedRects.push({ x: pos.x, y: pos.y, w, h, type });
+        addFn(pos.x, pos.y, w, h);
+        placed++;
+        break;
+      }
 
-    for (let i = 0; i < lichenCount; i++) {
-      const w = Phaser.Math.Between(lichenSize.wMin, lichenSize.wMax);
-      const h = Phaser.Math.Between(lichenSize.hMin, lichenSize.hMax);
+      if (placed === 0) {
+        const w = Phaser.Math.Between(size.wMin, size.wMax);
+        const h = Phaser.Math.Between(size.hMin, size.hMax);
+        const px = this.player.x;
+        const py = this.player.y;
+        const corners = [
+          { x: pad + w / 2, y: pad + h / 2 },
+          { x: this.worldW - pad - w / 2, y: pad + h / 2 },
+          { x: pad + w / 2, y: this.worldH - pad - h / 2 },
+          { x: this.worldW - pad - w / 2, y: this.worldH - pad - h / 2 }
+        ];
+        corners.sort((a, b) =>
+          Phaser.Math.Distance.Between(b.x, b.y, px, py) -
+          Phaser.Math.Distance.Between(a.x, a.y, px, py)
+        );
+        const pos = corners[0];
+        this._placedRects.push({ x: pos.x, y: pos.y, w, h, type });
+        addFn(pos.x, pos.y, w, h);
+        placed++;
+      }
 
-      const pos = this._findPlacement(w, h, pad, minFromPlayer, minBetweenPatches, 40);
-      if (!pos) continue;
+      return placed;
+    };
 
-      this._placedRects.push({ x: pos.x, y: pos.y, w, h, type: "lichen" });
-      this._addBiomePatch(pos.x, pos.y, w, h, "lichen");
-    }
+    placeBiome("soil", soilCount, soilSize, minBetweenSoil, (x, y, w, h) => {
+      this._addSoilObstacle(x, y, w, h);
+    });
+
+    placeBiome("moss", mossCount, mossSize, minBetweenPatches, (x, y, w, h) => {
+      this._addBiomePatch(x, y, w, h, "moss");
+    });
+
+    placeBiome("lichen", lichenCount, lichenSize, minBetweenPatches, (x, y, w, h) => {
+      this._addBiomePatch(x, y, w, h, "lichen");
+    });
   }
 
   _clearBiomesAndSoil() {
