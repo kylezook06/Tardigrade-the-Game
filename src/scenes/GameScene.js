@@ -957,6 +957,8 @@ class GameScene extends Phaser.Scene {
       this.registry.set("nextLevelXp", nextLevelXP);
       this._emitNote(`Level up! (${nextLevel})`);
 
+      this._applyAutoUpgrade();
+
       if (nextLevel % 5 === 0) {
         this._openUpgradeChoice();
         break;
@@ -1152,31 +1154,54 @@ class GameScene extends Phaser.Scene {
   }
 
   _applyAutoUpgrade() {
+    const last = (this.registry.get("upgradeHistory") || []).slice(-1)[0];
     const options = [
-      () => {
+      {
+        id: "belly",
+        fn: () => {
         const m = this.registry.get("hungerMax") + 15;
         this.registry.set("hungerMax", m);
         this.registry.set("hunger", Phaser.Math.Clamp(this.registry.get("hunger") + 15, 0, m));
         this._emitNote("Upgrade: Bigger belly (+Max Hunger).");
+        }
       },
-      () => {
+      {
+        id: "speed",
+        fn: () => {
         const s = this.registry.get("speed") + 18;
         this.registry.set("speed", s);
         this._emitNote("Upgrade: Faster feet (+Move Speed).");
+        }
       },
-      () => {
+      {
+        id: "resist",
+        fn: () => {
         const r = Math.min(45, (this.registry.get("resist") || 0) + 6);
         this.registry.set("resist", r);
         this._emitNote("Upgrade: Tougher cuticle (+Resistance).");
+        }
       },
-      () => {
+      {
+        id: "magnet",
+        fn: () => {
         const m = Math.min(300, (this.registry.get("magnet") || 0) + 40);
         this.registry.set("magnet", m);
         this._emitNote("Upgrade: Sticky vibes (+Food Magnet).");
+        }
       }
     ];
 
-    Phaser.Utils.Array.GetRandom(options)();
+    let pool = options;
+    if (last && options.length > 1) {
+      pool = options.filter((option) => option.id !== last);
+    }
+
+    const pick = Phaser.Utils.Array.GetRandom(pool);
+    pick.fn();
+
+    const history = this.registry.get("upgradeHistory") || [];
+    history.push(pick.id);
+    this.registry.set("upgradeHistory", history.slice(-12));
     this._emitRandomFact();
   }
 
