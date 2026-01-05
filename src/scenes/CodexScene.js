@@ -170,6 +170,8 @@ class CodexScene extends Phaser.Scene {
   _refreshText() {
     const codex = this.registry.get("codex") || {};
     const entries = codex.entries || {};
+    const totalEntries = codex.total || 0;
+    const unlockedEntries = Object.values(entries).filter((entry) => entry.unlocked).length;
     const hungerMax = this.registry.get("hungerMax") || 0;
     const speed = this.registry.get("speed") || 0;
     const resist = this.registry.get("resist") || 0;
@@ -198,7 +200,7 @@ class CodexScene extends Phaser.Scene {
     lines.push(`Tougher Cuticle: Resistance ${resist}`);
     lines.push(`Sticky Vibes: Magnet Radius ${magnet}`);
     lines.push("");
-    lines.push("CODEX ENTRIES");
+    lines.push(`CODEX ENTRIES (${unlockedEntries}/${totalEntries})`);
     lines.push("----------------------------------------");
     lines.push("");
 

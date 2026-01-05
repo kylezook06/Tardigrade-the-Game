@@ -1184,7 +1184,7 @@ class GameScene extends Phaser.Scene {
       {
         id: "magnet",
         fn: () => {
-        const m = Math.min(300, (this.registry.get("magnet") || 0) + 40);
+        const m = Math.min(220, (this.registry.get("magnet") || 0) + 20);
         this.registry.set("magnet", m);
         this._emitNote("Upgrade: Sticky vibes (+Food Magnet).");
         }
@@ -1236,8 +1236,8 @@ class GameScene extends Phaser.Scene {
       {
         id: "magnet",
         title: "Sticky Vibes",
-        desc: "+40 food magnet radius, up to 300.",
-        canShow: () => (this.registry.get("magnet") || 0) < 300
+        desc: "+20 food magnet radius, up to 220.",
+        canShow: () => (this.registry.get("magnet") || 0) < 220
       }
     ];
 
@@ -1252,7 +1252,7 @@ class GameScene extends Phaser.Scene {
     const magnetVal = this.registry.get("magnet") || 0;
     const picks = [];
 
-    if (magnetVal < 300) {
+    if (magnetVal < 220) {
       const mag = pool.find((d) => d.id === "magnet") || defs.find((d) => d.id === "magnet");
       if (mag) {
         picks.push(mag);
@@ -1291,7 +1291,7 @@ class GameScene extends Phaser.Scene {
         this._emitNote("Upgrade: Tougher cuticle (+Resistance).");
       },
       magnet: () => {
-        const m = Math.min(300, (this.registry.get("magnet") || 0) + 40);
+        const m = Math.min(220, (this.registry.get("magnet") || 0) + 20);
         this.registry.set("magnet", m);
         this._emitNote("Upgrade: Sticky vibes (+Food Magnet).");
       }
