@@ -195,7 +195,6 @@ class GameScene extends Phaser.Scene {
     if (this.registry.get("runEnded")) return;
     if (this.registry.get("codexOpen")) return;
     if (this.registry.get("upgradeOpen")) return;
-    if (this.registry.get("upgradeOpen")) return;
     const dt = delta / 1000;
 
     const elapsedMs = time - this.runStart;
@@ -1088,11 +1087,12 @@ class GameScene extends Phaser.Scene {
     this.registry.set("extinctionCountdownMs", 0);
     this.registry.set("upgradeOpen", false);
     this.registry.set("upgradeHistory", []);
+    this.registry.set("codex", { entries: {}, rewarded: false, total: 10 });
   }
 
   _initCodexIfNeeded() {
     if (!this.registry.get("codex")) {
-      this.registry.set("codex", { entries: {} });
+      this.registry.set("codex", { entries: {}, rewarded: false, total: 10 });
     }
   }
 
@@ -1106,6 +1106,18 @@ class GameScene extends Phaser.Scene {
       codex.entries[key].seenAtMs = this.time.now - this.runStart;
       this.registry.set("codex", codex);
       this.game.events.emit("ui:codexUnlock", { key });
+
+      const total = codex.total || 0;
+      const unlockedCount = Object.values(codex.entries).filter((e) => e.unlocked).length;
+      if (total > 0 && unlockedCount >= total && !codex.rewarded) {
+        codex.rewarded = true;
+        this.registry.set("codex", codex);
+
+        const hpMax = this.registry.get("hpMax") + 25;
+        this.registry.set("hpMax", hpMax);
+        this.registry.set("hp", Phaser.Math.Clamp(this.registry.get("hp") + 25, 0, hpMax));
+        this._emitNote("Codex complete! +25 HP bonus.");
+      }
     }
   }
 
@@ -1169,8 +1181,8 @@ class GameScene extends Phaser.Scene {
       {
         id: "magnet",
         title: "Sticky Vibes",
-        desc: "+40 food magnet radius, up to 220.",
-        canShow: () => (this.registry.get("magnet") || 0) < 220
+        desc: "+80 food magnet radius, up to 300.",
+        canShow: () => (this.registry.get("magnet") || 0) < 300
       }
     ];
 
@@ -1185,7 +1197,7 @@ class GameScene extends Phaser.Scene {
     const magnetVal = this.registry.get("magnet") || 0;
     const picks = [];
 
-    if (magnetVal === 0) {
+    if (magnetVal < 300) {
       const mag = pool.find((d) => d.id === "magnet") || defs.find((d) => d.id === "magnet");
       if (mag) {
         picks.push(mag);
@@ -1224,7 +1236,7 @@ class GameScene extends Phaser.Scene {
         this._emitNote("Upgrade: Tougher cuticle (+Resistance).");
       },
       magnet: () => {
-        const m = Math.min(220, (this.registry.get("magnet") || 0) + 40);
+        const m = Math.min(300, (this.registry.get("magnet") || 0) + 80);
         this.registry.set("magnet", m);
         this._emitNote("Upgrade: Sticky vibes (+Food Magnet).");
       }
