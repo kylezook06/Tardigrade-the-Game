@@ -115,6 +115,7 @@ class CodexScene extends Phaser.Scene {
   open() {
     this.isOpen = true;
     this.registry.set("codexOpen", true);
+    this.registry.set("codexPauseStartedAt", this.game.loop.now);
 
     if (this.scene.isActive("GameScene")) this.scene.pause("GameScene");
     if (this.scene.isActive("UIScene")) this.scene.pause("UIScene");
@@ -138,6 +139,16 @@ class CodexScene extends Phaser.Scene {
     if (this.scene.isPaused("GameScene")) this.scene.resume("GameScene");
     if (this.scene.isPaused("UIScene")) this.scene.resume("UIScene");
 
+    const pauseStartedAt = this.registry.get("codexPauseStartedAt");
+    if (pauseStartedAt) {
+      const durationMs = this.game.loop.now - pauseStartedAt;
+      const gameScene = this.scene.get("GameScene");
+      if (gameScene && gameScene.applyCodexPauseDuration) {
+        gameScene.applyCodexPauseDuration(durationMs);
+      }
+    }
+    this.registry.set("codexPauseStartedAt", 0);
+
     this.dimmer.setVisible(false);
     this.panel.setVisible(false);
     this.title.setVisible(false);
@@ -159,6 +170,10 @@ class CodexScene extends Phaser.Scene {
   _refreshText() {
     const codex = this.registry.get("codex") || {};
     const entries = codex.entries || {};
+    const hungerMax = this.registry.get("hungerMax") || 0;
+    const speed = this.registry.get("speed") || 0;
+    const resist = this.registry.get("resist") || 0;
+    const magnet = this.registry.get("magnet") || 0;
 
     const catalog = [
       { key: "food_algae", title: "Algae / Biofilm", text: "Primary grazing food source in water films; boosts hunger steadily." },
@@ -175,6 +190,17 @@ class CodexScene extends Phaser.Scene {
 
     const lines = [];
     let any = false;
+
+    lines.push("CURRENT UPGRADES");
+    lines.push("----------------------------------------");
+    lines.push(`Bigger Belly: Max Hunger ${hungerMax}`);
+    lines.push(`Faster Feet: Move Speed ${speed}`);
+    lines.push(`Tougher Cuticle: Resistance ${resist}`);
+    lines.push(`Sticky Vibes: Magnet Radius ${magnet}`);
+    lines.push("");
+    lines.push("CODEX ENTRIES");
+    lines.push("----------------------------------------");
+    lines.push("");
 
     catalog.forEach((item) => {
       if (entries[item.key] && entries[item.key].unlocked) {

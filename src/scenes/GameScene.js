@@ -1121,6 +1121,36 @@ class GameScene extends Phaser.Scene {
     }
   }
 
+  applyCodexPauseDuration(durationMs) {
+    if (!durationMs) return;
+    this.runStart += durationMs;
+
+    if (this.lastReproductionTime) {
+      this.lastReproductionTime += durationMs;
+    }
+
+    if (this.tun) {
+      this.tun.readyAt += durationMs;
+      this.tun.endsAt += durationMs;
+    }
+
+    if (this.extinction) {
+      this.extinction.startAtMs += durationMs;
+      this.extinction.warnAtMs += durationMs;
+      if (this.extinction.endAtMs) this.extinction.endAtMs += durationMs;
+    }
+
+    if (this.predators) {
+      this.predators.children.iterate((predator) => {
+        if (!predator) return;
+        const nextWanderAt = predator.getData("nextWanderAt");
+        if (typeof nextWanderAt === "number" && nextWanderAt) {
+          predator.setData("nextWanderAt", nextWanderAt + durationMs);
+        }
+      });
+    }
+  }
+
   _applyAutoUpgrade() {
     const options = [
       () => {
@@ -1140,7 +1170,7 @@ class GameScene extends Phaser.Scene {
         this._emitNote("Upgrade: Tougher cuticle (+Resistance).");
       },
       () => {
-        const m = Math.min(220, (this.registry.get("magnet") || 0) + 40);
+        const m = Math.min(300, (this.registry.get("magnet") || 0) + 40);
         this.registry.set("magnet", m);
         this._emitNote("Upgrade: Sticky vibes (+Food Magnet).");
       }
@@ -1181,7 +1211,7 @@ class GameScene extends Phaser.Scene {
       {
         id: "magnet",
         title: "Sticky Vibes",
-        desc: "+80 food magnet radius, up to 300.",
+        desc: "+40 food magnet radius, up to 300.",
         canShow: () => (this.registry.get("magnet") || 0) < 300
       }
     ];
@@ -1236,7 +1266,7 @@ class GameScene extends Phaser.Scene {
         this._emitNote("Upgrade: Tougher cuticle (+Resistance).");
       },
       magnet: () => {
-        const m = Math.min(300, (this.registry.get("magnet") || 0) + 80);
+        const m = Math.min(300, (this.registry.get("magnet") || 0) + 40);
         this.registry.set("magnet", m);
         this._emitNote("Upgrade: Sticky vibes (+Food Magnet).");
       }
